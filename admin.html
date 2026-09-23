@@ -1,0 +1,829 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard Admin - Aplikasi TKAS SDN Adiwerna 3</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Pustaka Pembaca & Penulis Berbagai Jenis File (SheetJS) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        * { font-family: 'Plus Jakarta Sans', sans-serif; }
+        body { background: linear-gradient(135deg, #f0f4f8, #e2e8f0); min-height: 100vh; }
+        .pro-card { background: #ffffff; border: 1px solid rgba(226, 232, 240, 0.8); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+        .gradient-header { background: linear-gradient(135deg, #1e3a8a, #2563eb); }
+
+        /* Styling khusus untuk cetak kartu grid A4 (muat 8 kartu per halaman) */
+        @media print {
+            body * { visibility: hidden; }
+            #printArea, #printArea * { visibility: visible; }
+            #printArea {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                display: grid;
+                grid-template-columns: repeat(2, 1fr);
+                gap: 10px;
+                padding: 10px;
+                background: white;
+            }
+            .exam-card-item {
+                break-inside: avoid;
+                page-break-inside: avoid;
+                border: 1.5px solid #2563eb !important;
+                border-radius: 12px;
+                padding: 12px;
+                background: #ffffff;
+            }
+        }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen text-slate-800">
+
+    <header class="gradient-header text-white sticky top-0 z-30 px-6 py-4 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-white/10 backdrop-blur-md text-white font-extrabold px-3.5 py-2 rounded-xl text-sm border border-white/20">NZ</div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-wide">Panel Administrator TKAS</h1>
+                    <p class="text-xs text-blue-200">SDN Adiwerna 3 &bull; NZ Production</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <span class="text-xs font-semibold bg-white/15 backdrop-blur-md px-3.5 py-1.5 rounded-xl border border-white/20">👑 Administrator</span>
+                <button id="btnLogout" class="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-xl text-xs font-semibold transition shadow-sm">Keluar Sistem</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl w-full mx-auto p-6 flex-grow flex flex-col gap-6">
+        
+        <!-- Statistik -->
+        <div class="grid grid-cols-1 sm:grid-cols-4 gap-5">
+            <div class="pro-card rounded-2xl p-5 border-l-4 border-blue-600 bg-gradient-to-br from-white to-blue-50/40">
+                <p class="text-xs font-bold uppercase tracking-wider text-blue-600 mb-1">Total Pengguna</p>
+                <h3 id="totalUsers" class="text-2xl font-extrabold text-slate-900">0</h3>
+            </div>
+            <div class="pro-card rounded-2xl p-5 border-l-4 border-amber-500 bg-gradient-to-br from-white to-amber-50/40">
+                <p class="text-xs font-bold uppercase tracking-wider text-amber-600 mb-1">Total Bank Soal</p>
+                <h3 id="totalQuestions" class="text-2xl font-extrabold text-slate-900">0</h3>
+            </div>
+            <div class="pro-card rounded-2xl p-5 border-l-4 border-purple-500 bg-gradient-to-br from-white to-purple-50/40">
+                <p class="text-xs font-bold uppercase tracking-wider text-purple-600 mb-1">Token Ujian Aktif</p>
+                <h3 id="activeTokenDisplay" class="text-xl font-extrabold text-purple-700 tracking-wider">------</h3>
+            </div>
+            <div class="pro-card rounded-2xl p-5 border-l-4 border-emerald-500 bg-gradient-to-br from-white to-emerald-50/40">
+                <p class="text-xs font-bold uppercase tracking-wider text-emerald-600 mb-1">Ujian Selesai</p>
+                <h3 id="totalExams" class="text-2xl font-extrabold text-slate-900">0</h3>
+            </div>
+        </div>
+
+        <!-- Tab Navigasi -->
+        <div class="flex flex-wrap gap-2 border-b border-slate-300 pb-2">
+            <button onclick="switchTab('users')" id="tabUsersBtn" class="px-4 py-2 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-sm transition">Kelola Pengguna</button>
+            <button onclick="switchTab('questions')" id="tabQuestionsBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">Bank Soal & Paket</button>
+            <button onclick="switchTab('upload')" id="tabUploadBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">📁 Upload File (AI Groq)</button>
+            <button onclick="switchTab('add')" id="tabAddBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">+ Soal Manual</button>
+            <button onclick="switchTab('cards')" id="tabCardsBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">🖨️ Cetak Kartu Peserta</button>
+            <button onclick="switchTab('token')" id="tabTokenBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">Token & Durasi</button>
+            <button onclick="switchTab('analytics')" id="tabAnalyticsBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">📊 Analisis & Evaluasi AI</button>
+        </div>
+
+        <!-- SECTION 1: USERS -->
+        <section id="sectionUsers" class="pro-card rounded-2xl p-6 flex flex-col gap-5">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">Manajemen Pengguna & Import Massal</h2>
+                    <p class="text-xs text-slate-500">Kelola akun, download template, atau upload Excel untuk daftar akun massal</p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                    <button onclick="downloadUserTemplate()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm">📥 Download Template</button>
+                    <button onclick="document.getElementById('excelUserFile').click()" class="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-sm">📂 Upload Excel Akun</button>
+                    <input type="file" id="excelUserFile" accept=".xlsx, .xls, .csv" class="hidden" onchange="handleUserExcelUpload(event)">
+                    <button id="btnOpenAddModal" class="bg-blue-600 hover:bg-blue-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-md">+ Tambah Manual</button>
+                </div>
+            </div>
+            <div class="overflow-x-auto rounded-xl border border-slate-200">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-100/70 text-slate-700 border-b border-slate-200 text-xs uppercase tracking-wider">
+                            <th class="p-3.5 font-bold">Nama</th>
+                            <th class="p-3.5 font-bold">Email</th>
+                            <th class="p-3.5 font-bold">Role</th>
+                            <th class="p-3.5 font-bold text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="userTableBody">
+                        <tr><td colspan="4" class="p-6 text-center text-slate-400 text-sm">Memuat data...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- SECTION 2: QUESTIONS & PACKAGES -->
+        <section id="sectionQuestions" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-5">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">Manajemen Paket Soal Ujian</h2>
+                    <p class="text-xs text-slate-500">Atur paket soal yang aktif untuk dibagikan ke siswa</p>
+                </div>
+                <button onclick="deleteAllQuestions()" class="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-xl text-xs font-bold transition">🗑️ Hapus Semua Bank Soal</button>
+            </div>
+            <div class="overflow-x-auto rounded-xl border border-slate-200">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-100/70 text-slate-700 border-b border-slate-200 text-xs uppercase tracking-wider">
+                            <th class="p-3.5 font-bold">Paket Soal</th>
+                            <th class="p-3.5 font-bold">Tipe Soal</th>
+                            <th class="p-3.5 font-bold">Pertanyaan</th>
+                            <th class="p-3.5 font-bold">Status Siswa</th>
+                            <th class="p-3.5 font-bold text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="questionTableBody">
+                        <tr><td colspan="5" class="p-6 text-center text-slate-400 text-sm">Memuat soal...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- SECTION 3: UPLOAD FILE GROQ AI -->
+        <section id="sectionUpload" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-5 max-w-2xl">
+            <div>
+                <h2 class="text-base font-bold text-slate-900">Upload Dokumen Soal (Otomatis Jadi Paket Baru)</h2>
+                <p class="text-xs text-slate-500">Unggah file soal. Groq AI super cepat akan mengekstrak dan menjadikannya paket aktif untuk siswa.</p>
+            </div>
+            <div class="border-2 border-dashed border-blue-300 bg-blue-50/50 rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-3">
+                <span class="text-4xl">⚡🤖</span>
+                <input type="file" id="anyFile" accept=".xlsx, .xls, .csv, .docx, .pdf, .txt" class="hidden" onchange="handleUniversalUpload(event)">
+                <button onclick="document.getElementById('anyFile').click()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold transition shadow-md">Pilih Berkas Dokumen Soal</button>
+            </div>
+        </section>
+
+        <!-- SECTION 4: ADD MANUAL -->
+        <section id="sectionAdd" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-4 max-w-2xl">
+            <div>
+                <h2 class="text-base font-bold text-slate-900">Form Pembuatan Soal Manual per Paket</h2>
+            </div>
+            <form id="addQuestionForm" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Nama Paket Soal</label>
+                    <input type="text" id="manualPackage" placeholder="Contoh: Paket A" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none font-bold text-blue-600">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Tipe Soal</label>
+                    <select id="qType" onchange="toggleQuestionType()" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none">
+                        <option value="pilgan">Pilihan Ganda (1 Jawaban)</option>
+                        <option value="complex">Pilihan Ganda Kompleks (> 1 Jawaban)</option>
+                        <option value="truefalse">Benar / Salah</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Pertanyaan</label>
+                    <textarea id="qText" rows="3" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></textarea>
+                </div>
+                <div id="optionsGroup" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi A</label><input type="text" id="optA" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi B</label><input type="text" id="optB" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi C</label><input type="text" id="optC" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi D</label><input type="text" id="optD" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Kunci Jawaban</label>
+                    <input type="text" id="qAnswer" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none">
+                </div>
+                <div class="flex justify-end pt-2">
+                    <button type="submit" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-md">Simpan Soal ke Paket</button>
+                </div>
+            </form>
+        </section>
+
+        <!-- SECTION: CETAK KARTU PESERTA (GRID 8 KARTU PER HALAMAN A4) -->
+        <section id="sectionCards" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-5">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">Cetak Kartu Peserta Ujian Massal</h2>
+                    <p class="text-xs text-slate-500">Format otomatis disusun menjadi 8 kartu per halaman lembar A4</p>
+                </div>
+                <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-md transition">🖨️ Cetak Semua Kartu (A4)</button>
+            </div>
+            
+            <div id="printArea" class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200">
+                <!-- Diisi via JavaScript -->
+            </div>
+        </section>
+
+        <!-- SECTION 5: TOKEN & DURASI -->
+        <section id="sectionToken" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-6 max-w-xl">
+            <div>
+                <h2 class="text-base font-bold text-slate-900">Token Ujian Otomatis (Auto-Refresh 5 Menit)</h2>
+            </div>
+            <div class="bg-purple-50 border border-purple-200 rounded-2xl p-6 flex flex-col items-center justify-center gap-3">
+                <span class="text-xs font-bold uppercase tracking-widest text-purple-600">Token Aktif Saat Ini</span>
+                <div id="currentTokenBox" class="text-4xl font-extrabold text-purple-900 tracking-widest bg-white px-6 py-3 rounded-xl border border-purple-200 shadow-inner">------</div>
+                <div class="text-xs font-semibold text-slate-600 bg-white px-3 py-1.5 rounded-full border border-purple-100">
+                    ⏱️ Berganti dalam: <span id="countdownTimer" class="text-purple-600 font-bold">05:00</span>
+                </div>
+            </div>
+            <button onclick="forceGenerateToken()" class="bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-bold text-sm transition shadow-md">🔄 Ganti Token Sekarang</button>
+            
+            <div class="border-t pt-4 mt-2">
+                <h3 class="text-sm font-bold text-slate-900 mb-2">Durasi Pengerjaan Ujian (Menit)</h3>
+                <div class="flex gap-3">
+                    <input type="number" id="examDurationInput" min="1" max="300" placeholder="Contoh: 70" class="w-full px-3 py-2.5 border rounded-xl bg-slate-50 text-sm font-bold text-blue-600 outline-none">
+                    <button onclick="saveExamDuration()" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap shadow-sm">Simpan Durasi</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- SECTION 6: ANALYTICS & AI INSIGHTS -->
+        <section id="sectionAnalytics" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-5">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">Analisis Rekap Nilai & Evaluasi Siswa</h2>
+                    <p class="text-xs text-slate-500">Pantau progres siswa dan rekomendasi materi perbaikan dari Groq AI</p>
+                </div>
+                <button onclick="deleteAllExamResults()" class="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-2 rounded-xl text-xs font-bold transition">🗑️ Hapus Semua Nilai</button>
+            </div>
+
+            <!-- Kotak Wawasan AI -->
+            <div id="aiInsightsBox"></div>
+
+            <div class="overflow-x-auto rounded-xl border border-slate-200">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-100/70 text-slate-700 border-b border-slate-200 text-xs uppercase tracking-wider">
+                            <th class="p-3.5 font-bold">Nama Siswa (ID)</th>
+                            <th class="p-3.5 font-bold">Skor Akhir</th>
+                            <th class="p-3.5 font-bold">Status Pengerjaan</th>
+                            <th class="p-3.5 font-bold">Waktu Selesai</th>
+                            <th class="p-3.5 font-bold text-center">Aksi</th>
+                        </tr>
+                    </thead>
+                    <tbody id="analyticsTableBody">
+                        <tr><td colspan="5" class="p-6 text-center text-slate-400 text-sm">Memuat data rekap nilai...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer Copyright -->
+    <footer class="mt-auto py-6 text-center text-xs text-slate-500 border-t border-slate-200 bg-white/50 backdrop-blur-sm">
+        <p class="font-semibold text-slate-700">NZ Production &bull; SDN Adiwerna 3</p>
+        <p class="mt-1">&copy; 2026 Hak Cipta Dilindungi Undang-Undang.</p>
+    </footer>
+
+    <!-- Modal Tambah User -->
+    <div id="userModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs hidden items-center justify-center p-4 z-50">
+        <div class="pro-card rounded-2xl p-6 max-w-md w-full shadow-2xl">
+            <h3 class="text-base font-bold text-slate-900 mb-4">Tambah Pengguna Baru</h3>
+            <form id="addUserForm" class="space-y-3">
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Nama</label><input type="text" id="addName" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Email</label><input type="email" id="addEmail" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Password</label><input type="password" id="addPassword" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                <div>
+                    <label class="block text-xs font-semibold text-slate-600 mb-1">Role</label>
+                    <select id="addRole" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none">
+                        <option value="student">Siswa</option>
+                        <option value="teacher">Guru</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div class="flex justify-end gap-2 pt-3">
+                    <button type="button" onclick="closeUserModal()" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-semibold">Batal</button>
+                    <button type="submit" class="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-semibold shadow-md">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://xmqrddlcdfrylgzwviuo.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtcXJkZGxjZGZyeWxnend2aXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNzQyODYsImV4cCI6MjEwNTc1MDI4Nn0.6LJOxROS8uvb2XnnAd924VkvnXv5jpFJTI7mKS8YJ3o'; 
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+        const GROQ_API_KEY = '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';
+
+        function switchTab(tab) {
+            ['sectionUsers', 'sectionQuestions', 'sectionUpload', 'sectionAdd', 'sectionCards', 'sectionToken', 'sectionAnalytics'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            ['tabUsersBtn', 'tabQuestionsBtn', 'tabUploadBtn', 'tabAddBtn', 'tabCardsBtn', 'tabTokenBtn', 'tabAnalyticsBtn'].forEach(id => document.getElementById(id).className = 'px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition');
+
+            if(tab === 'users') { document.getElementById('sectionUsers').classList.remove('hidden'); document.getElementById('tabUsersBtn').className = 'px-4 py-2 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-sm transition'; loadData(); }
+            else if(tab === 'questions') { document.getElementById('sectionQuestions').classList.remove('hidden'); document.getElementById('tabQuestionsBtn').className = 'px-4 py-2 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-sm transition'; loadQuestions(); }
+            else if(tab === 'upload') { document.getElementById('sectionUpload').classList.remove('hidden'); document.getElementById('tabUploadBtn').className = 'px-4 py-2 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-sm transition'; }
+            else if(tab === 'add') { document.getElementById('sectionAdd').classList.remove('hidden'); document.getElementById('tabAddBtn').className = 'px-4 py-2 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-sm transition'; }
+            else if(tab === 'cards') { document.getElementById('sectionCards').classList.remove('hidden'); document.getElementById('tabCardsBtn').className = 'px-4 py-2 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-sm transition'; loadCardsGrid(); }
+            else if(tab === 'token') { document.getElementById('sectionToken').classList.remove('hidden'); document.getElementById('tabTokenBtn').className = 'px-4 py-2 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-sm transition'; }
+            else if(tab === 'analytics') { document.getElementById('sectionAnalytics').classList.remove('hidden'); document.getElementById('tabAnalyticsBtn').className = 'px-4 py-2 rounded-xl font-bold text-sm bg-blue-600 text-white shadow-sm transition'; loadAnalytics(); }
+        }
+
+        document.getElementById('btnLogout').addEventListener('click', () => {
+            Swal.fire({ title: 'Keluar sistem?', icon: 'question', showCancelButton: true, confirmButtonColor: '#2563eb', confirmButtonText: 'Ya' }).then(r => { if(r.isConfirmed) window.location.href = 'index.html'; });
+        });
+
+        function toggleQuestionType() {
+            const type = document.getElementById('qType').value;
+            const optionsGroup = document.getElementById('optionsGroup');
+            if(type === 'truefalse') {
+                optionsGroup.innerHTML = `<div class="col-span-2 bg-slate-50 p-3 rounded-xl border text-xs text-slate-500 font-semibold">Otomatis opsi: A. Benar | B. Salah</div>`;
+            } else {
+                optionsGroup.innerHTML = `
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi A</label><input type="text" id="optA" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi B</label><input type="text" id="optB" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi C</label><input type="text" id="optC" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi D</label><input type="text" id="optD" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                `;
+            }
+        }
+
+        async function loadData() {
+            const { data: users } = await supabaseClient.from('Users').select('*');
+            if(users) {
+                document.getElementById('totalUsers').textContent = users.length;
+                document.getElementById('userTableBody').innerHTML = users.map(u => `
+                    <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition">
+                        <td class="p-3.5 font-medium text-slate-900">${u.Name || u.name || 'Tanpa Nama'}</td>
+                        <td class="p-3.5 text-slate-600">${u.email}</td>
+                        <td class="p-3.5"><span class="px-2.5 py-1 rounded-md text-xs font-bold uppercase bg-blue-50 text-blue-700">${u.role}</span></td>
+                        <td class="p-3.5 text-center"><button onclick="deleteUser('${u.email}')" class="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1 rounded-lg text-xs font-bold">Hapus</button></td>
+                    </tr>
+                `).join('');
+            }
+        }
+
+        // Fitur: Download Template Excel untuk Import Akun
+        function downloadUserTemplate() {
+            const templateData = [
+                { nama: "Ahmad Zaky", email: "zaky@student.sch.id", password: "rahasia123", role: "student" },
+                { nama: "Siti Aminah", email: "aminah@student.sch.id", password: "rahasia123", role: "student" },
+                { nama: "Budi Santoso", email: "budi@teacher.sch.id", password: "gurusecure456", role: "teacher" }
+            ];
+            const worksheet = XLSX.utils.json_to_sheet(templateData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Template Akun");
+            XLSX.writeFile(workbook, "template_import_users.xlsx");
+        }
+
+        // Fitur: Upload Excel untuk Import Akun Massal
+        async function handleUserExcelUpload(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            Swal.fire({ title: 'Membaca File Excel...', html: 'Mengimpor akun ke database...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            try {
+                const data = new Uint8Array(await file.arrayBuffer());
+                const workbook = XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                const rows = XLSX.utils.sheet_to_json(worksheet);
+
+                if (rows.length === 0) {
+                    Swal.fire('Peringatan', 'File Excel kosong atau format kolom tidak dikenali!', 'warning');
+                    return;
+                }
+
+                let successCount = 0;
+                for (let r of rows) {
+                    let name = r.nama || r.Nama || r.NAME;
+                    let email = (r.email || r.Email || r.EMAIL || '').toLowerCase().trim();
+                    let password = r.password || r.Password || r.PASSWORD;
+                    let role = (r.role || r.Role || r.ROLE || 'student').toLowerCase().trim();
+
+                    if (name && email && password) {
+                        const { error } = await supabaseClient.from('Users').insert([{ Name: name, email, password, role }]);
+                        if (!error) successCount++;
+                    }
+                }
+
+                Swal.fire('Berhasil!', `Sukses mengimpor ${successCount} akun baru ke sistem!`, 'success');
+                loadData();
+            } catch (err) {
+                console.error(err);
+                Swal.fire('Gagal', 'Terjadi kesalahan saat memproses file Excel akun.', 'error');
+            } finally {
+                event.target.value = '';
+            }
+        }
+
+        async function loadCardsGrid() {
+            const { data: students } = await supabaseClient.from('Users').select('*').eq('role', 'student');
+            const container = document.getElementById('printArea');
+            if(students) {
+                container.innerHTML = students.length ? students.map(s => `
+                    <div class="exam-card-item bg-white border border-blue-300 rounded-xl p-3.5 flex flex-col justify-between shadow-xs">
+                        <div class="text-center border-b pb-2 mb-2">
+                            <span class="text-[9px] font-extrabold text-blue-600 uppercase tracking-widest">KARTU PESERTA UJIAN TKAD</span>
+                            <h4 class="text-xs font-extrabold text-slate-900">SDN ADIWERNA 3</h4>
+                        </div>
+                        <div class="space-y-1 text-[11px]">
+                            <div class="flex justify-between"><span class="text-slate-500 font-medium">Nama:</span> <strong class="text-slate-900 truncate max-w-[150px]">${s.Name || s.name || 'Siswa'}</strong></div>
+                            <div class="flex justify-between"><span class="text-slate-500 font-medium">Email/ID:</span> <strong class="text-slate-900 truncate max-w-[150px]">${s.email}</strong></div>
+                            <div class="flex justify-between"><span class="text-slate-500 font-medium">Ruang:</span> <strong class="text-blue-600">Online</strong></div>
+                        </div>
+                        <div class="mt-2 pt-2 border-t text-[9px] text-slate-400 text-center">
+                            NZ Production &bull; Tahun 2026
+                        </div>
+                    </div>
+                `).join('') : `<div class="col-span-2 text-center text-slate-400 p-6 text-sm">Belum ada akun siswa terdaftar.</div>`;
+            }
+        }
+
+        async function loadQuestions() {
+            const { data: qs } = await supabaseClient.from('questions').select('*');
+            if(qs) {
+                document.getElementById('totalQuestions').textContent = qs.length;
+                document.getElementById('questionTableBody').innerHTML = qs.length ? qs.map(q => {
+                    let rawType = (q.question_type || 'pilgan').toLowerCase();
+                    let badgeText = 'Pilihan Ganda';
+                    let badgeColor = 'bg-blue-50 text-blue-600';
+
+                    if(rawType === 'complex') { badgeText = 'Ganda Kompleks'; badgeColor = 'bg-purple-50 text-purple-600'; }
+                    else if(rawType === 'truefalse') { badgeText = 'Benar / Salah'; badgeColor = 'bg-amber-50 text-amber-600'; }
+
+                    let isActive = q.is_active === true;
+                    let statusBadge = isActive ? `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">Aktif (Live)</span>` : `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500">Non-Aktif</span>`;
+                    let toggleBtnText = isActive ? 'Nonaktifkan' : 'Aktifkan';
+                    let toggleBtnClass = isActive ? 'bg-amber-50 hover:bg-amber-100 text-amber-700' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700';
+
+                    return `
+                        <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition">
+                            <td class="p-3.5 font-extrabold text-blue-700">${q.package_name || 'Paket A'}</td>
+                            <td class="p-3.5"><span class="px-2 py-0.5 rounded text-[11px] font-bold ${badgeColor}">${badgeText}</span></td>
+                            <td class="p-3.5 font-medium text-slate-900 max-w-xs truncate">${q.question_text || ''}</td>
+                            <td class="p-3.5">${statusBadge}</td>
+                            <td class="p-3.5 text-center flex justify-center gap-1.5">
+                                <button onclick="togglePackageStatus('${q.package_name || 'Paket A'}', ${!isActive})" class="${toggleBtnClass} px-2.5 py-1 rounded-lg text-xs font-bold">${toggleBtnText}</button>
+                                <button onclick="deleteQuestion(${q.id})" class="bg-red-50 hover:bg-red-100 text-red-600 px-2.5 py-1 rounded-lg text-xs font-bold">Hapus</button>
+                            </td>
+                        </tr>
+                    `;
+                }).join('') : `<tr><td colspan="5" class="p-6 text-center text-slate-400 text-sm">Belum ada soal tersedia.</td></tr>`;
+            }
+        }
+
+        async function togglePackageStatus(packageName, targetStatus) {
+            if (targetStatus) {
+                await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', packageName);
+            }
+            const { error } = await supabaseClient.from('questions').update({ is_active: targetStatus }).eq('package_name', packageName);
+            if(error) Swal.fire('Gagal', error.message, 'error');
+            else {
+                Swal.fire({ icon: 'success', title: `Paket ${packageName} ${targetStatus ? 'Diaktifkan' : 'Dinonaktifkan'}`, timer: 1200, showConfirmButton: false });
+                loadQuestions();
+            }
+        }
+
+        async function handleUniversalUpload(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+            const fileName = file.name.toLowerCase();
+
+            let packageNameInput = prompt("Masukkan Nama Paket untuk file ini (Contoh: Paket B):", "Paket B");
+            if (!packageNameInput) return;
+
+            Swal.fire({ title: 'Groq AI Membaca Dokumen...', html: 'Mengekstrak dan merapikan soal dengan kecepatan kilat...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            try {
+                let extractedText = "";
+                if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
+                    const data = new Uint8Array(await file.arrayBuffer());
+                    const workbook = XLSX.read(data, {type: 'array'});
+                    extractedText = XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]]);
+                } else if (fileName.endsWith('.docx')) {
+                    const result = await mammoth.extractRawText({arrayBuffer: await file.arrayBuffer()});
+                    extractedText = result.value;
+                } else if (fileName.endsWith('.pdf')) {
+                    const pdf = await pdfjsLib.getDocument(new Uint8Array(await file.arrayBuffer())).promise;
+                    for (let i = 1; i <= pdf.numPages; i++) {
+                        let page = await pdf.getPage(i);
+                        let content = await page.getTextContent();
+                        extractedText += content.items.map(item => item.str).join(" ") + "\n";
+                    }
+                } else if (fileName.endsWith('.txt')) {
+                    extractedText = await file.text();
+                }
+
+                await parseWithGroqAI(extractedText, packageNameInput);
+            } catch (err) {
+                console.error(err);
+                Swal.fire('Gagal', 'Terjadi kesalahan saat membaca file atau memproses AI.', 'error');
+            }
+        }
+
+        async function parseWithGroqAI(rawText, packageName) {
+            const prompt = `Anda adalah asisten cerdas pembuat soal ujian. Analisis teks mentah berikut, lalu ekstrak menjadi array objek JSON murni (hanya format JSON valid, tanpa teks pengantar lain) dengan struktur persis seperti ini:
+            [
+              {
+                "question": "Teks pertanyaan soal",
+                "type": "pilgan",
+                "opt_a": "Pilihan A",
+                "opt_b": "Pilihan B",
+                "opt_c": "Pilihan C",
+                "opt_d": "Pilihan D",
+                "answer": "A"
+              }
+            ]
+
+            Teks mentah dokumen:
+            ${rawText.substring(0, 12000)}`;
+
+            try {
+                const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${GROQ_API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: 'openai/gpt-oss-120b',
+                        messages: [{ role: 'user', content: prompt }],
+                        response_format: { type: "json_object" }
+                    })
+                });
+
+                const result = await response.json();
+                if (result.error) throw new Error(result.error.message);
+
+                let candidateText = result.choices[0].message.content;
+                let questionsArray = [];
+                let parsed = JSON.parse(candidateText);
+                if (Array.isArray(parsed)) {
+                    questionsArray = parsed;
+                } else {
+                    let key = Object.keys(parsed).find(k => Array.isArray(parsed[k]));
+                    questionsArray = key ? parsed[key] : [];
+                }
+
+                await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', packageName);
+
+                let count = 0;
+                for (let q of questionsArray) {
+                    if (q.question && q.answer) {
+                        await supabaseClient.from('questions').insert([{
+                            question_text: q.question,
+                            correct_answer: q.answer,
+                            question_type: q.type || 'pilgan',
+                            package_name: packageName,
+                            is_active: true,
+                            option: { a: q.opt_a || '', b: q.opt_b || '', c: q.opt_c || '', d: q.opt_d || '' }
+                        }]);
+                        count++;
+                    }
+                }
+
+                Swal.fire('Berhasil!', `Groq AI sukses membuat "${packageName}" dengan ${count} soal & otomatis menjadi paket aktif!`, 'success');
+                switchTab('questions');
+
+            } catch (err) {
+                console.error("Detail Error Groq:", err);
+                Swal.fire('Gagal AI', 'Terjadi kesalahan saat memproses Groq AI: ' + err.message, 'error');
+            }
+        }
+
+        document.getElementById('addQuestionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const packageName = document.getElementById('manualPackage').value.trim() || 'Paket A';
+            const type = document.getElementById('qType').value;
+            const question = document.getElementById('qText').value;
+            const answer = document.getElementById('qAnswer').value;
+            let opt_a = type !== 'truefalse' ? document.getElementById('optA').value : 'Benar';
+            let opt_b = type !== 'truefalse' ? document.getElementById('optB').value : 'Salah';
+            let opt_c = type !== 'truefalse' ? document.getElementById('optC').value : '';
+            let opt_d = type !== 'truefalse' ? document.getElementById('optD').value : '';
+
+            const { error } = await supabaseClient.from('questions').insert([{
+                question_text: question,
+                correct_answer: answer,
+                question_type: type,
+                package_name: packageName,
+                is_active: true,
+                option: { a: opt_a, b: opt_b, c: opt_c, d: opt_d }
+            }]);
+
+            if(error) Swal.fire('Gagal', error.message, 'error');
+            else {
+                Swal.fire({ icon: 'success', title: 'Soal berhasil disimpan', timer: 1500, showConfirmButton: false });
+                document.getElementById('addQuestionForm').reset();
+                switchTab('questions');
+            }
+        });
+
+        async function deleteQuestion(id) {
+            const res = await Swal.fire({ title: 'Hapus soal?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444' });
+            if (res.isConfirmed) {
+                await supabaseClient.from('questions').delete().eq('id', id);
+                loadQuestions();
+            }
+        }
+
+        async function deleteAllQuestions() {
+            const res = await Swal.fire({
+                title: 'Hapus Seluruh Bank Soal?',
+                text: 'Tindakan ini akan menghapus semua paket soal yang ada di database!',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                confirmButtonText: 'Ya, Hapus Semua!'
+            });
+            if (res.isConfirmed) {
+                const { error } = await supabaseClient.from('questions').delete().neq('id', 0);
+                if(error) Swal.fire('Gagal', error.message, 'error');
+                else {
+                    Swal.fire('Terhapus!', 'Semua bank soal berhasil dibersihkan.', 'success');
+                    loadQuestions();
+                }
+            }
+        }
+
+        async function loadAnalytics() {
+            const { data: results } = await supabaseClient.from('exam_results').select('*').order('created_at', { ascending: false });
+            const { data: users } = await supabaseClient.from('Users').select('*').eq('role', 'student');
+
+            if(results) {
+                document.getElementById('totalExams').textContent = results.length;
+                document.getElementById('analyticsTableBody').innerHTML = results.length ? results.map(r => `
+                    <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition">
+                        <td class="p-3.5 font-bold text-slate-900">${r.student_id || 'Siswa'}</td>
+                        <td class="p-3.5 font-extrabold text-blue-600">${r.score}</td>
+                        <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">Selesai Ujian</span></td>
+                        <td class="p-3.5 text-xs text-slate-500">${r.created_at ? new Date(r.created_at).toLocaleString('id-ID') : '-'}</td>
+                        <td class="p-3.5 text-center">
+                            <button onclick="deleteExamResult(${r.id})" class="bg-red-50 hover:bg-red-100 text-red-600 px-3 py-1 rounded-lg text-xs font-bold">Hapus</button>
+                        </td>
+                    </tr>
+                `).join('') : `<tr><td colspan="5" class="p-6 text-center text-slate-400 text-sm">Belum ada siswa yang menyelesaikan ujian.</td></tr>`;
+
+                generateAIGroqInsights(results, users ? users.length : 0);
+            }
+        }
+
+        async function deleteExamResult(id) {
+            const res = await Swal.fire({ title: 'Hapus nilai siswa ini?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444' });
+            if (res.isConfirmed) {
+                await supabaseClient.from('exam_results').delete().eq('id', id);
+                loadAnalytics();
+            }
+        }
+
+        async function deleteAllExamResults() {
+            const res = await Swal.fire({
+                title: 'Hapus Semua Rekap Nilai?',
+                text: 'Semua riwayat nilai ujian siswa akan dihapus permanen!',
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#ef4444',
+                confirmButtonText: 'Ya, Hapus Semua!'
+            });
+            if (res.isConfirmed) {
+                const { error } = await supabaseClient.from('exam_results').delete().neq('id', 0);
+                if(error) Swal.fire('Gagal', error.message, 'error');
+                else {
+                    Swal.fire('Terhapus!', 'Semua rekap nilai berhasil dikosongkan.', 'success');
+                    loadAnalytics();
+                }
+            }
+        }
+
+        async function generateAIGroqInsights(results, totalRegisteredStudents) {
+            const container = document.getElementById('aiInsightsBox');
+            if (!container) return;
+
+            let completedCount = results.length;
+            let pendingCount = Math.max(0, totalRegisteredStudents - completedCount);
+            let avgScore = completedCount > 0 ? Math.round(results.reduce((acc, curr) => acc + curr.score, 0) / completedCount) : 0;
+
+            container.innerHTML = `
+                <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center gap-3">
+                    <span class="text-2xl animate-spin">⚡</span>
+                    <div>
+                        <h4 class="text-xs font-bold text-indigo-900 uppercase tracking-wide">Groq AI Menganalisis Kelas...</h4>
+                        <p class="text-xs text-indigo-700">Menyusun evaluasi dan rekomendasi materi...</p>
+                    </div>
+                </div>
+            `;
+
+            const prompt = `Bertindaklah sebagai pengawas kurikulum SD. Data rekap tryout:
+            - Total Siswa: ${totalRegisteredStudents}
+            - Sudah Selesai: ${completedCount}
+            - Belum Mengerjakan: ${pendingCount}
+            - Rata-rata Skor: ${avgScore}
+            - Skor: ${JSON.stringify(results.map(r => ({ nama: r.student_id, skor: r.score })))}
+
+            Berikan analisis singkat profesional (dalam bahasa Indonesia, gunakan format HTML paragraf/poin) mengenai:
+            1. Evaluasi performa kelas.
+            2. Rekomendasi topik pembelajaran yang harus ditingkatkan guru.`;
+
+            try {
+                const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${GROQ_API_KEY}`
+                    },
+                    body: JSON.stringify({
+                        model: 'openai/gpt-oss-120b',
+                        messages: [{ role: 'user', content: prompt }]
+                    })
+                });
+
+                const resJson = await response.json();
+                if(resJson.choices && resJson.choices[0]) {
+                    let aiText = resJson.choices[0].message.content;
+                    container.innerHTML = `
+                        <div class="p-5 bg-gradient-to-r from-indigo-50 via-blue-50 to-white border border-indigo-200 rounded-2xl space-y-3">
+                            <div class="flex items-center gap-2 text-indigo-900 font-extrabold text-sm">
+                                <span>⚡</span> Rekomendasi & Evaluasi Pembelajaran oleh Groq AI
+                            </div>
+                            <div class="text-xs text-slate-700 leading-relaxed space-y-2">
+                                ${aiText.replace(/\n/g, '<br>')}
+                            </div>
+                        </div>
+                    `;
+                }
+            } catch (err) {
+                container.innerHTML = `<div class="p-3 bg-slate-50 text-xs text-slate-500 rounded-xl">Gagal memuat wawasan AI.</div>`;
+            }
+        }
+
+        const TOKEN_INTERVAL = 5 * 60 * 1000;
+        function initToken() {
+            let data = JSON.parse(localStorage.getItem('tkad_token_session'));
+            let now = new Date().getTime();
+            if (!data || (now - data.timestamp > TOKEN_INTERVAL)) {
+                let chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', token = '';
+                for (let i = 0; i < 6; i++) token += chars.charAt(Math.floor(Math.random() * chars.length));
+                data = { token, timestamp: now };
+                localStorage.setItem('tkad_token_session', JSON.stringify(data));
+            }
+            document.getElementById('activeTokenDisplay').textContent = data.token;
+            document.getElementById('currentTokenBox').textContent = data.token;
+        }
+
+        function forceGenerateToken() {
+            let chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', token = '';
+            for (let i = 0; i < 6; i++) token += chars.charAt(Math.floor(Math.random() * chars.length));
+            localStorage.setItem('tkad_token_session', JSON.stringify({ token, timestamp: new Date().getTime() }));
+            initToken();
+            Swal.fire({ icon: 'success', title: 'Token Diperbarui', timer: 1200, showConfirmButton: false });
+        }
+
+        setInterval(() => {
+            let data = JSON.parse(localStorage.getItem('tkad_token_session'));
+            if (!data) { initToken(); return; }
+            let remaining = TOKEN_INTERVAL - (new Date().getTime() - data.timestamp);
+            if (remaining <= 0) initToken();
+            else {
+                let m = Math.floor(remaining / 60000), s = Math.floor((remaining % 60000) / 1000);
+                document.getElementById('countdownTimer').textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            }
+        }, 1000);
+        initToken();
+
+        function saveExamDuration() {
+            const val = document.getElementById('examDurationInput').value;
+            const minutes = parseInt(val);
+            if(!minutes || minutes <= 0) { Swal.fire('Peringatan', 'Masukkan menit valid!', 'warning'); return; }
+            localStorage.setItem('tkad_exam_duration_minutes', minutes);
+            Swal.fire('Berhasil', `Durasi ujian diatur ${minutes} menit.`, 'success');
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            const saved = localStorage.getItem('tkad_exam_duration_minutes') || '60';
+            const field = document.getElementById('examDurationInput');
+            if(field) field.value = saved;
+        });
+
+        const userModal = document.getElementById('userModal');
+        document.getElementById('btnOpenAddModal').addEventListener('click', () => userModal.classList.remove('hidden'), userModal.classList.add('flex'));
+        function closeUserModal() { userModal.classList.add('hidden'); userModal.classList.remove('flex'); }
+
+        document.getElementById('addUserForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const Name = document.getElementById('addName').value;
+            const email = document.getElementById('addEmail').value.toLowerCase();
+            const password = document.getElementById('addPassword').value;
+            const role = document.getElementById('addRole').value;
+
+            const { error } = await supabaseClient.from('Users').insert([{ Name, email, password, role }]);
+            if(error) Swal.fire('Gagal', error.message, 'error');
+            else { closeUserModal(); loadData(); Swal.fire('Berhasil', 'Pengguna ditambah', 'success'); }
+        });
+
+        window.deleteUser = async (email) => { if(confirm('Hapus user?')) { await supabaseClient.from('Users').delete().eq('email', email); loadData(); } }
+        loadData();
+    </script>
+</body>
+</html>

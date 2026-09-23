@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Masuk &bull; TKAS SDN Adiwerna 3</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Supabase SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <!-- SweetAlert2 -->
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        * { font-family: 'Plus Jakarta Sans', sans-serif; }
+        
+        body {
+            background: linear-gradient(135deg, #090d16 0%, #1e1b4b 35%, #1e3a8a 70%, #0f172a 100%);
+            background-size: 400% 400%;
+            animation: gradientBG 15s ease infinite;
+            min-height: 100vh;
+        }
+        @keyframes gradientBG {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(25px);
+            -webkit-backdrop-filter: blur(25px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        }
+
+        .glass-input {
+            background: rgba(15, 23, 42, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #f8fafc;
+        }
+        .glass-input:focus {
+            background: rgba(15, 23, 42, 0.8);
+            border-color: #60a5fa;
+            box-shadow: 0 0 20px rgba(96, 165, 250, 0.2);
+        }
+
+        .btn-glow {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.5);
+            transition: all 0.3s ease;
+        }
+        .btn-glow:hover {
+            box-shadow: 0 15px 30px -5px rgba(59, 130, 246, 0.7);
+            transform: translateY(-2px);
+        }
+
+        /* Kustomisasi SweetAlert2 agar senada dan mewah */
+        .swal2-popup.custom-luxury-popup {
+            background: rgba(15, 23, 42, 0.95) !important;
+            backdrop-filter: blur(20px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            border-radius: 2rem !important;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5) !important;
+            color: #f8fafc !important;
+        }
+        .swal2-title {
+            color: #ffffff !important;
+            font-weight: 800 !important;
+        }
+        .swal2-html-container {
+            color: #94a3b8 !important;
+        }
+        .swal2-confirm {
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%) !important;
+            border-radius: 1rem !important;
+            font-weight: 700 !important;
+            padding: 0.75rem 2rem !important;
+            box-shadow: 0 10px 20px rgba(59, 130, 246, 0.4) !important;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col items-center justify-center p-6 text-slate-100 relative overflow-hidden">
+
+    <!-- Efek Cahaya Ambient Belakang -->
+    <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-600/20 rounded-full blur-[120px] pointer-events-none animate-pulse"></div>
+    <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-indigo-600/20 rounded-full blur-[120px] pointer-events-none animate-pulse" style="animation-delay: 2s;"></div>
+
+    <!-- Kotak Utama Luxury -->
+    <div class="max-w-md w-full glass-panel rounded-[2.5rem] p-8 sm:p-10 flex flex-col gap-8 relative z-10">
+        
+        <!-- Header / Logo -->
+        <div class="text-center space-y-3">
+            <div class="w-20 h-20 bg-gradient-to-tr from-blue-600 via-indigo-600 to-violet-600 text-white rounded-3xl mx-auto flex items-center justify-center text-2xl font-extrabold shadow-2xl shadow-blue-500/40 border border-white/20 transform hover:scale-105 transition duration-300">
+                NZ
+            </div>
+            <div>
+                <h1 class="text-2xl font-extrabold tracking-tight text-white">TKAS</h1>
+                <p class="text-xs text-blue-200/70 font-medium mt-1">SDN Adiwerna 3 &bull; NZ Production</p>
+            </div>
+        </div>
+
+        <!-- Form Login Elegan -->
+        <form id="loginForm" class="space-y-5">
+            <div class="space-y-1.5">
+                <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">Email Akun</label>
+                <input type="email" id="loginEmail" placeholder="nama@sekolah.edu" required class="w-full px-4.5 py-4 rounded-2xl text-sm glass-input outline-none transition font-medium placeholder:text-slate-500">
+            </div>
+            
+            <div class="space-y-1.5">
+                <label class="block text-[11px] font-bold text-slate-300 uppercase tracking-wider">Password</label>
+                <div class="relative">
+                    <input type="password" id="loginPassword" placeholder="••••••••" required class="w-full px-4.5 py-4 pr-12 rounded-2xl text-sm glass-input outline-none transition font-medium placeholder:text-slate-500">
+                    <!-- Tombol Toggle Lihat/Sembunyikan Sandi -->
+                    <button type="button" onclick="togglePasswordVisibility()" class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition focus:outline-none">
+                        <svg id="eyeIcon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor" class="w-5 h-5">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <button type="submit" class="w-full py-4 btn-glow text-white font-extrabold rounded-2xl text-sm tracking-wide active:scale-98">
+                Masuk ke Sistem 🚀
+            </button>
+        </form>
+
+        <!-- Footer Info -->
+        <div class="text-center text-[11px] font-semibold text-slate-400/80 pt-4 border-t border-white/5">
+            Sistem Ujian Terintegrasi &bull; Aman &amp; Real-time
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = 'https://xmqrddlcdfrylgzwviuo.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtcXJkZGxjZGZyeWxnend2aXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNzQyODYsImV4cCI6MjEwNTc1MDI4Nn0.6LJOxROS8uvb2XnnAd924VkvnXv5jpFJTI7mKS8YJ3o'; 
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        // Fungsi Toggle Lihat / Sembunyikan Password
+        function togglePasswordVisibility() {
+            const passwordInput = document.getElementById('loginPassword');
+            const eyeIcon = document.getElementById('eyeIcon');
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                // Ubah icon jadi mata tercoret (Sembunyikan)
+                eyeIcon.innerHTML = `
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" />
+                `;
+            } else {
+                passwordInput.type = 'password';
+                // Kembalikan ke icon mata normal
+                eyeIcon.innerHTML = `
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                `;
+            }
+        }
+
+        document.getElementById('loginForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('loginEmail').value.trim().toLowerCase();
+            const password = document.getElementById('loginPassword').value.trim();
+
+            Swal.fire({
+                title: 'ngenteni delat lagi ngecek...',
+                html: '<div class="text-xs text-blue-400 font-medium">Menghubungkan ke server database...</div>',
+                customClass: { popup: 'custom-luxury-popup' },
+                allowOutsideClick: false,
+                didOpen: () => Swal.showLoading()
+            });
+
+            const { data: users, error } = await supabaseClient
+                .from('Users')
+                .select('*')
+                .eq('email', email);
+
+            if (error || !users || users.length === 0) {
+                Swal.fire({
+                    title: 'Akses Ditolak',
+                    text: 'Email yang Anda masukkan tidak terdaftar di sistem.',
+                    icon: 'error',
+                    customClass: { popup: 'custom-luxury-popup' },
+                    confirmButtonText: 'Coba Lagi'
+                });
+                return;
+            }
+
+            const user = users[0];
+
+            if (user.password !== password) {
+                Swal.fire({
+                    title: 'Password Salah',
+                    text: 'Periksa kembali password Anda.',
+                    icon: 'warning',
+                    customClass: { popup: 'custom-luxury-popup' },
+                    confirmButtonText: 'Ulangi'
+                });
+                return;
+            }
+
+            localStorage.setItem('tkad_current_user', JSON.stringify(user));
+
+            Swal.fire({
+                icon: 'success',
+                title: `Selamat Datang King, ${user.Name || user.name || 'Pengguna'}!`,
+                text: 'Hormat pada King...',
+                customClass: { popup: 'custom-luxury-popup' },
+                timer: 1300,
+                showConfirmButton: false
+            });
+
+            setTimeout(() => {
+                let role = (user.role || '').toLowerCase();
+                if (role === 'admin') {
+                    window.location.href = 'admin.html';
+                } else if (role === 'teacher' || role === 'guru') {
+                    window.location.href = 'teacher.html';
+                } else {
+                    window.location.href = 'student.html';
+                }
+            }, 1300);
+        });
+    </script>
+</body>
+</html>

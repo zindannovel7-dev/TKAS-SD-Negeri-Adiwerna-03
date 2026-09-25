@@ -339,11 +339,9 @@
         });
 
         async function fetchTokenAndDurationFromDB() {
-            // Ambil Token Aktif
             const { data: tokenData } = await supabaseClient.from('system_settings').select('*').eq('key', 'active_token').single();
             if(tokenData) { document.getElementById('activeTokenDisplay').textContent = tokenData.value; document.getElementById('currentTokenBox').textContent = tokenData.value; }
 
-            // Ambil Durasi Ujian dari Database Supabase (Tabel system_settings)
             const { data: durationData } = await supabaseClient.from('system_settings').select('*').eq('key', 'exam_duration').single();
             if(durationData && durationData.value) {
                 document.getElementById('examDurationInput').value = durationData.value;
@@ -361,7 +359,6 @@
             Swal.fire({ icon: 'success', title: 'Token Baru!', html: `Token: <strong class="text-purple-700">${token}</strong>`, timer: 2000, showConfirmButton: false });
         }
 
-        // Simpan Durasi Ujian Langsung ke Database Supabase (Tabel system_settings)
         async function saveExamDuration() {
             let durationVal = document.getElementById('examDurationInput').value.trim();
             if(!durationVal || isNaN(durationVal)) {
@@ -438,6 +435,7 @@
             }
         }
 
+        // --- UPDATE: KARTU PESERTA DENGAN PASSWORD/SANDI ---
         async function loadCardsGrid() {
             const { data: students } = await supabaseClient.from('Users').select('*');
             const container = document.getElementById('printArea');
@@ -448,12 +446,13 @@
                 container.innerHTML = studentList.length ? studentList.map(s => `
                     <div class="exam-card-item bg-white border border-blue-300 rounded-xl p-3.5 flex flex-col justify-between">
                         <div class="text-center border-b pb-2 mb-2">
-                            <span class="text-[9px] font-extrabold text-blue-600 uppercase tracking-widest">KARTU PESERTA UJIAN TKAD</span>
+                            <span class="text-[9px] font-extrabold text-blue-600 uppercase tracking-widest">KARTU PESERTA UJIAN TKAS</span>
                             <h4 class="text-xs font-extrabold text-slate-900">SDN ADIWERNA 3</h4>
                         </div>
                         <div class="space-y-1 text-[11px]">
                             <div class="flex justify-between"><span class="text-slate-500">Nama:</span> <strong class="text-slate-900">${s.Name || s.name || '-'}</strong></div>
                             <div class="flex justify-between"><span class="text-slate-500">Email:</span> <strong class="text-slate-900">${s.email || '-'}</strong></div>
+                            <div class="flex justify-between"><span class="text-slate-500">Sandi:</span> <strong class="text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded font-mono">${s.password || '-'}</strong></div>
                         </div>
                     </div>
                 `).join('') : `<div class="col-span-2 text-center text-slate-400 p-6">Belum ada data siswa terdaftar.</div>`;

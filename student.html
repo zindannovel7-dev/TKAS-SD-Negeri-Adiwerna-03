@@ -85,7 +85,7 @@
     </main>
 
     <script>
-        // Proteksi Role Universal: Pastikan hanya role 'student' yang dapat mengakses halaman ini
+        // Proteksi Role Universal
         (function() {
             try {
                 const currentUser = JSON.parse(localStorage.getItem('tkad_current_user') || '{}');
@@ -113,9 +113,8 @@
         const STORAGE_KEY_ANSWERS = `tkad_saved_answers_student`;
         const STORAGE_KEY_INDEX = `tkad_saved_index_student`;
         const STORAGE_KEY_START_TIME = `tkad_exam_start_timestamp`;
-        const STORAGE_KEY_QUESTIONS = `tkad_shuffled_questions_student`; // Menyimpan urutan acak soal siswa agar tetap konsisten saat direfresh
+        const STORAGE_KEY_QUESTIONS = `tkad_shuffled_questions_student`;
 
-        // Fungsi Algoritma Fisher-Yates Shuffle untuk Mengacak Urutan Soal
         function shuffleArray(array) {
             let arr = [...array];
             for (let i = arr.length - 1; i > 0; i--) {
@@ -125,7 +124,6 @@
             return arr;
         }
 
-        // POP-UP KONFIRMASI KELUAR MENGGUNAKAN SWEETALERT2
         document.getElementById('btnLogout').addEventListener('click', () => {
             Swal.fire({
                 title: 'Keluar Ujian?',
@@ -145,20 +143,28 @@
         });
 
         async function verifyTokenAndStart() {
-            let registeredName = localStorage.getItem(STORAGE_KEY_NAME);
-            let inputName = registeredName;
+            let inputName = document.getElementById('studentNameInput').value.trim();
+            if (!inputName) {
+                Swal.fire('Perhatian', 'Silakan masukkan nama lengkap Anda terlebih dahulu.', 'warning');
+                return;
+            }
 
-            if (!registeredName) {
-                inputName = document.getElementById('studentNameInput').value.trim();
-                if(!inputName) {
-                    Swal.fire('Perhatian', 'Silakan masukkan nama lengkap Anda terlebih dahulu.', 'warning');
-                    return;
-                }
-            } else {
-                let typedName = document.getElementById('studentNameInput').value.trim();
-                if (typedName && typedName.toLowerCase() !== registeredName.toLowerCase()) {
-                    Swal.fire('Akses Ditolak', `Nama tidak sesuai dengan akun aktif perangkat ini (${registeredName}). Gunakan nama yang sama atau keluar sesi terlebih dahulu.`, 'error');
-                    return;
+            // Validasi ketat ke database tabel 'Users'
+            Swal.fire({ title: 'Memeriksa Akun & Token...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            const { data: userRecords } = await supabaseClient.from('Users').select('*');
+            if (userRecords) {
+                let studentList = userRecords.filter(u => (u.role || '').toLowerCase() === 'student');
+                if (studentList.length > 0) {
+                    let matchedUser = studentList.find(u => {
+                        let dbName = (u.Name || u.name || '').trim().toLowerCase();
+                        return dbName === inputName.toLowerCase();
+                    });
+
+                    if (!matchedUser) {
+                        Swal.fire('Akses Ditolak', 'Nama siswa tidak terdaftar di dalam sistem data siswa SDN Adiwerna 3. Periksa kembali ejaan nama Anda.', 'error');
+                        return;
+                    }
                 }
             }
 
@@ -168,25 +174,29 @@
                 return;
             }
 
-            Swal.fire({ title: 'Memeriksa Token...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
-
             const { data: tokenData } = await supabaseClient.from('system_settings').select('*').eq('key', 'active_token').single();
-            
             if (!tokenData || tokenData.value !== inputToken) {
                 Swal.fire('Token Salah', 'Token ujian tidak valid atau belum aktif.', 'error');
                 return;
             }
 
             const { data: questions } = await supabaseClient.from('questions').select('*').eq('is_active', true);
-
             if (!questions || questions.length === 0) {
                 Swal.fire('Kosong', 'Belum ada paket soal aktif yang disiapkan oleh guru.', 'warning');
                 return;
             }
 
-            // SOAL DIAKAD SECARA OTOMATIS DI SINI UNTUK SETIAP SISWA
-            activeQuestions = shuffleArray(questions);
-            localStorage.setItem(STORAGE_KEY_QUESTIONS, JSON.stringify(activeQuestions));
+            if (!localStorage.getItem(STORAGE_KEY_QUESTIONS)) {
+                activeQuestions = shuffleArray(questions);
+                localStorage.setItem(STORAGE_KEY_QUESTIONS, JSON.stringify(activeQuestions));
+            } else {
+                try {
+                    activeQuestions = JSON.parse(localStorage.getItem(STORAGE_KEY_QUESTIONS));
+                } catch(e) {
+                    activeQuestions = shuffleArray(questions);
+                    localStorage.setItem(STORAGE_KEY_QUESTIONS, JSON.stringify(activeQuestions));
+                }
+            }
 
             Swal.close();
 
@@ -195,11 +205,11 @@
             localStorage.setItem(STORAGE_KEY_TOKEN, inputToken);
             localStorage.setItem('tkad_current_user', JSON.stringify({ name: inputName, role: 'student' }));
 
+            // Set waktu mulai secara permanen untuk sesi ini (tidak reset saat refresh)
             if (!localStorage.getItem(STORAGE_KEY_START_TIME)) {
                 localStorage.setItem(STORAGE_KEY_START_TIME, new Date().getTime());
             }
 
-            // Catat status siswa ke live_sessions Supabase (menjadi 'exam') agar terpantau Guru & Admin
             await supabaseClient.from('live_sessions').upsert([{ 
                 student_id: inputName, 
                 status: 'exam', 
@@ -209,7 +219,7 @@
             launchExamRoom();
         }
 
-        function launchExamRoom() {
+        async function launchExamRoom() {
             document.getElementById('sectionTokenVerify').classList.add('hidden');
             document.getElementById('sectionExamRoom').classList.remove('hidden');
             document.getElementById('examTimerBadge').classList.remove('hidden');
@@ -219,7 +229,6 @@
                 document.getElementById('studentWelcomeTitle').textContent = `Ujian: ${savedName}`;
             }
 
-            // Ambil soal yang sudah diacak sebelumnya agar urutannya tetap sama jika halaman direfresh
             let savedQuestionsJSON = localStorage.getItem(STORAGE_KEY_QUESTIONS);
             if (savedQuestionsJSON) {
                 try { activeQuestions = JSON.parse(savedQuestionsJSON); } catch(e) {}
@@ -234,15 +243,31 @@
                 currentIndex = parseInt(savedIdx) || 0;
             }
 
-            startExamTimer();
+            await startExamTimer();
             renderQuestionNumberGrid();
             renderQuestion();
         }
 
-        function startExamTimer() {
-            let durationMinutes = parseInt(localStorage.getItem('tkad_exam_duration_minutes') || '60');
+        async function startExamTimer() {
+            // Ambil durasi langsung dari database system_settings agar sinkron dengan admin (cth: 100 menit)
+            let durationMinutes = 60; 
+            try {
+                const { data: settingData } = await supabaseClient.from('system_settings').select('*').eq('key', 'exam_duration').single();
+                if (settingData && settingData.value) {
+                    durationMinutes = parseInt(settingData.value) || 60;
+                } else {
+                    let localDur = localStorage.getItem('tkad_exam_duration_minutes');
+                    if (localDur) durationMinutes = parseInt(localDur) || 60;
+                }
+            } catch(e) {
+                let localDur = localStorage.getItem('tkad_exam_duration_minutes');
+                if (localDur) durationMinutes = parseInt(localDur) || 60;
+            }
+
             let totalDurationSeconds = durationMinutes * 60;
             let startTime = parseInt(localStorage.getItem(STORAGE_KEY_START_TIME) || new Date().getTime());
+
+            if (examTimerInterval) clearInterval(examTimerInterval);
 
             examTimerInterval = setInterval(() => {
                 let now = new Date().getTime();
@@ -510,7 +535,6 @@
 
             let evaluationHTML = `<strong>Analisis Kekurangan:</strong> ${analysisText}<br><strong>Cara Penanganan:</strong> ${handlingText}`;
 
-            // Perbarui live_sessions menjadi 'finished' agar terekam selesai di panel guru & admin
             await supabaseClient.from('live_sessions').upsert([{ 
                 student_id: studentFullName, 
                 status: 'finished', 
@@ -585,7 +609,7 @@
                 document.getElementById('studentNameInput').value = savedName;
                 document.getElementById('studentNameInput').readOnly = true;
                 document.getElementById('studentNameInput').classList.add('bg-slate-200', 'cursor-not-allowed');
-                document.getElementById('verifyTitle',).textContent = `Masukkan Token Ujian`;
+                document.getElementById('verifyTitle').textContent = `Masukkan Token Ujian`;
                 document.getElementById('tokenInfoSub').textContent = `Halo ${savedName}, masukkan token terbaru dari pengawas untuk melanjutkan ujian.`;
             }
 

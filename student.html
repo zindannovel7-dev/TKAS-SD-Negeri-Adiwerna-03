@@ -134,6 +134,690 @@
                 cancelButtonColor: '#dc2626',
                 confirmButtonText: 'Ya, Keluar',
                 cancelButtonText: 'Batal'
+            }).then(async (res) => {
+                if (res.isConfirmed) {
+                    let studentName = localStorage.getItem(STORAGE_KEY_NAME);
+                    if (studentName) {
+                        await supabaseClient.from('live_sessions').upsert([{ 
+                            student_id: studentName, 
+                            status: 'login', 
+                            updated_at: new Date() 
+                        }], { onConflict: 'student_id' });
+                    }
+                    clearAllExamStorage();
+                    window.location.href = 'index.html';
+                }
+            });
+        });
+
+        async function verifyTokenAndStart() {
+            let inputName = document.getElementById('studentNameInput').value.trim();
+            if (!inputName) {
+                Swal.fire('Perhatian', 'Silakan masukkan nama lengkap Anda terlebih dahulu.', 'warning');
+                return;
+            }
+
+            // Validasi Sesi Aktif di Perangkat
+            let currentUser = {};
+            try {
+                currentUser = JSON.parse(localStorage.getItem('tkad_current_user') || '{}');
+            } catch(e) {}
+
+            if (currentUser.name && currentUser.name.trim().toLowerCase() !== inputName.toLowerCase()) {
+                Swal.fire(
+                    'Akses Ditolak ❌', 
+                    `Anda sedang menggunakan sesi akun <strong>${currentUser.name}</strong>. Anda tidak boleh memasukkan nama siswa lain (${inputName}). Silakan keluar (logout) terlebih dahulu jika ingin menggunakan akun lain.`, 
+                    'error'
+                );
+                return;
+            }
+
+            Swal.fire({ title: 'Memeriksa Status & Akun...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            // 1. Cek Apakah Siswa Sudah Pernah Menyelesaikan Ujian (One-Time Attempt)
+            const { data: existingResult } = await supabaseClient
+                .from('exam_results')
+                .select('*')
+                .ilike('student_id', inputName)
+                .maybeSingle();
+
+            if (existingResult) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Ujian Telah Selesai',
+                    text: `Halo ${inputName}, Anda sudah pernah mengumpulkan ujian ini sebelumnya (Skor: ${existingResult.score}). Anda hanya dapat mengerjakan satu kali dalam satu paket soal.`,
+                    confirmButtonColor: '#2563eb'
+                });
+                return;
+            }
+
+            // 2. Validasi ke Database Tabel 'Users'
+            const { data: userRecords } = await supabaseClient.from('Users').select('*');
+            if (userRecords) {
+                let studentList = userRecords.filter(u => (u.role || '').toLowerCase() === 'student');
+                if (studentList.length > 0) {
+                    let matchedUser = studentList.find(u => {
+                        let dbName = (u.Name || u.name || '').trim().toLowerCase();
+                        return dbName === inputName.toLowerCase();
+                    });
+
+                    if (!matchedUser) {
+                        Swal.fire('Akses Ditolak', 'Nama siswa tidak terdaftar di dalam sistem data siswa SDN Adiwerna 3. Periksa kembali ejaan nama Anda.', 'error');
+                        return;
+                    }
+                }
+            }
+
+            const inputToken = document.getElementById('tokenInput').value.trim().toUpperCase();
+            if(!inputToken) {
+                Swal.fire('Perhatian', 'Masukkan token ujian terlebih dahulu.', 'warning');
+                return;
+            }
+
+            const { data: tokenData } = await supabaseClient.from('system_settings').select('*').eq('key', 'active_token').single();
+            if (!tokenData || tokenData.value !== inputToken) {
+                Swal.fire('Token Salah', 'Token ujian tidak valid atau belum aktif.', 'error');
+                return;
+            }
+
+            const { data: questions } = await supabaseClient.from('questions').select('*').eq('is_active', true);
+            if (!questions || questions.length === 0) {
+                Swal.fire('Kosong', 'Belum ada paket soal aktif yang disiapkan oleh guru.', 'warning');
+                return;
+            }
+
+            if (!localStorage.getItem(STORAGE_KEY_QUESTIONS)) {
+                activeQuestions = shuffleArray(questions);
+                localStorage.setItem(STORAGE_KEY_QUESTIONS, JSON.stringify(activeQuestions));
+            } else {
+                try {
+                    activeQuestions = JSON.parse(localStorage.getItem(STORAGE_KEY_QUESTIONS));
+                } catch(e) {
+                    activeQuestions = shuffleArray(questions);
+                    localStorage.setItem(STORAGE_KEY_QUESTIONS, JSON.stringify(activeQuestions));
+                }
+            }
+
+            Swal.close();
+
+            localStorage.setItem(STORAGE_KEY_NAME, inputName);
+            localStorage.setItem(STORAGE_KEY_SESSION, 'true');
+            localStorage.setItem(STORAGE_KEY_TOKEN, inputToken);
+            localStorage.setItem('tkad_current_user', JSON.stringify({ name: inputName, role: 'student' }));
+
+            if (!localStorage.getItem(STORAGE_KEY_START_TIME)) {
+                localStorage.setItem(STORAGE_KEY_START_TIME, new Date().getTime());
+            }
+
+            await supabaseClient.from('live_sessions').upsert([{ 
+                student_id: inputName, 
+                status: 'exam', 
+                updated_at: new Date() 
+            }], { onConflict: 'student_id' });
+
+            launchExamRoom();
+        }
+
+        async function launchExamRoom() {
+            document.getElementById('sectionTokenVerify').classList.add('hidden');
+            document.getElementById('sectionExamRoom').classList.remove('hidden');
+            document.getElementById('examTimerBadge').classList.remove('hidden');
+
+            let savedName = localStorage.getItem(STORAGE_KEY_NAME);
+            if(savedName) {
+                document.getElementById('studentWelcomeTitle').textContent = `Ujian: ${savedName}`;
+            }
+
+            let savedQuestionsJSON = localStorage.getItem(STORAGE_KEY_QUESTIONS);
+            if (savedQuestionsJSON) {
+                try { activeQuestions = JSON.parse(savedQuestionsJSON); } catch(e) {}
+            }
+
+            let savedAns = localStorage.getItem(STORAGE_KEY_ANSWERS);
+            if (savedAns) {
+                try { studentAnswers = JSON.parse(savedAns); } catch(e) {}
+            }
+            let savedIdx = localStorage.getItem(STORAGE_KEY_INDEX);
+            if (savedIdx !== null) {
+                currentIndex = parseInt(savedIdx) || 0;
+            }
+
+            await startExamTimer();
+            renderQuestionNumberGrid();
+            renderQuestion();
+        }
+
+        async function startExamTimer() {
+            let durationMinutes = 60; 
+            try {
+                const { data: settingData } = await supabaseClient.from('system_settings').select('*').eq('key', 'exam_duration').single();
+                if (settingData && settingData.value) {
+                    durationMinutes = parseInt(settingData.value) || 60;
+                } else {
+                    let localDur = localStorage.getItem('tkad_exam_duration_minutes');
+                    if (localDur) durationMinutes = parseInt(localDur) || 60;
+                }
+            } catch(e) {
+                let localDur = localStorage.getItem('tkad_exam_duration_minutes');
+                if (localDur) durationMinutes = parseInt(localDur) || 60;
+            }
+
+            let totalDurationSeconds = durationMinutes * 60;
+            let startTime = parseInt(localStorage.getItem(STORAGE_KEY_START_TIME) || new Date().getTime());
+
+            if (examTimerInterval) clearInterval(examTimerInterval);
+
+            examTimerInterval = setInterval(() => {
+                let now = new Date().getTime();
+                let elapsedSeconds = Math.floor((now - startTime) / 1000);
+                let remainingSeconds = totalDurationSeconds - elapsedSeconds;
+
+                if (remainingSeconds <= 0) {
+                    clearInterval(examTimerInterval);
+                    remainingSeconds = 0;
+                    document.getElementById('examCountdown').textContent = `00:00`;
+                    Swal.fire({ 
+                        title: 'Waktu Habis!', 
+                        text: 'Waktu ujian telah selesai. Menampilkan hasil dan analisis nilai Anda.', 
+                        icon: 'info', 
+                        confirmButtonColor: '#2563eb',
+                        allowOutsideClick: false
+                    }).then(() => {
+                        submitExamData(true);
+                    });
+                    return;
+                }
+
+                let m = Math.floor(remainingSeconds / 60);
+                let s = remainingSeconds % 60;
+                document.getElementById('examCountdown').textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+            }, 1000);
+        }
+
+        function renderQuestionNumberGrid() {
+            const gridContainer = document.getElementById('questionNumberGrid');
+            gridContainer.innerHTML = activeQuestions.map((_, idx) => {
+                let isAnswered = studentAnswers[idx] !== undefined && studentAnswers[idx] !== '' && (!(Array.isArray(studentAnswers[idx])) || studentAnswers[idx].length > 0);
+                let isCurrent = idx === currentIndex;
+
+                let bgClass = 'bg-white text-slate-700 border-slate-200';
+                if (isCurrent) bgClass = 'bg-blue-600 text-white font-extrabold border-blue-600 ring-2 ring-blue-300';
+                else if (isAnswered) bgClass = 'bg-emerald-600 text-white font-bold border-emerald-600';
+
+                return `<button onclick="jumpToQuestion(${idx})" class="w-9 h-9 rounded-xl border text-xs font-bold transition flex items-center justify-center ${bgClass}">${idx + 1}</button>`;
+            }).join('');
+        }
+
+        function jumpToQuestion(idx) {
+            currentIndex = idx;
+            localStorage.setItem(STORAGE_KEY_INDEX, currentIndex);
+            renderQuestion();
+            renderQuestionNumberGrid();
+        }
+
+        function renderQuestion() {
+            const q = activeQuestions[currentIndex];
+            document.getElementById('questionNumberIndicator').textContent = `Soal No. ${currentIndex + 1} dari ${activeQuestions.length}`;
+            
+            let typeLabel = 'Pilihan Ganda';
+            let type = (q.question_type || 'pilgan').toLowerCase();
+
+            if (type === 'truefalse') typeLabel = 'Benar / Salah (Kategori)';
+            else if (type === 'complex') typeLabel = 'Pilihan Ganda Kompleks (Jawaban > 1)';
+            else if (type === 'isian') typeLabel = 'Isian Singkat';
+            else if (type === 'essay') typeLabel = 'Essay / Uraian';
+            document.getElementById('questionTypeBadge').textContent = typeLabel;
+
+            document.getElementById('questionContainer').innerHTML = `
+                <div class="space-y-3">
+                    <p class="font-bold text-slate-900">${q.question_text}</p>
+                    ${q.image_url ? `<div class="my-2"><img src="${q.image_url}" class="max-h-60 rounded-xl border object-contain"></div>` : ''}
+                    ${type === 'truefalse' ? `
+                        <div class="bg-amber-50 border border-amber-200 p-3 rounded-xl text-xs text-amber-800 font-medium">
+                            💡 <strong>Petunjuk:</strong> Tentukan kesesuaian setiap pernyataan di bawah ini dengan memilih <strong>[B] Benar</strong> atau <strong>[S] Salah</strong> di sebelah kanan.
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            const optContainer = document.getElementById('optionsContainer');
+            optContainer.innerHTML = '';
+
+            let savedAns = studentAnswers[currentIndex] || (type === 'complex' ? [] : (type === 'truefalse' ? {} : ''));
+
+            if (type === 'truefalse') {
+                let html = `<div class="space-y-3 mt-2">`;
+                let idxStmt = 1;
+                let currentTFAns = typeof savedAns === 'object' ? savedAns : {};
+                for (let [k, v] of Object.entries(q.option || {})) {
+                    if (v) {
+                        let selectedVal = currentTFAns[idxStmt] || '';
+                        html += `
+                            <div class="p-3.5 bg-white border-2 rounded-xl flex items-center justify-between gap-4 shadow-xs">
+                                <span class="text-sm font-semibold text-slate-800">${idxStmt}. ${v}</span>
+                                <div class="flex gap-2 shrink-0">
+                                    <label class="px-3 py-1.5 border-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-50 flex items-center gap-1.5 ${selectedVal === 'B' ? 'bg-blue-100 border-blue-600 text-blue-700' : 'border-slate-200'}">
+                                        <input type="radio" name="tf_q_${currentIndex}_${idxStmt}" value="B" ${selectedVal === 'B' ? 'checked' : ''} onchange="saveTFAnswer(${idxStmt}, 'B')"> [ ] B
+                                    </label>
+                                    <label class="px-3 py-1.5 border-2 rounded-lg text-xs font-bold cursor-pointer hover:bg-blue-50 flex items-center gap-1.5 ${selectedVal === 'S' ? 'bg-blue-100 border-blue-600 text-blue-700' : 'border-slate-200'}">
+                                        <input type="radio" name="tf_q_${currentIndex}_${idxStmt}" value="S" ${selectedVal === 'S' ? 'checked' : ''} onchange="saveTFAnswer(${idxStmt}, 'S')"> [ ] S
+                                    </label>
+                                </div>
+                            </div>
+                        `;
+                        idxStmt++;
+                    }
+                }
+                html += `</div>`;
+                optContainer.innerHTML = html;
+            } else if (type === 'isian' || type === 'essay') {
+                let tag = type === 'essay' ? 'textarea' : 'input';
+                let rowsAttr = type === 'essay' ? 'rows="4"' : '';
+                optContainer.innerHTML = `
+                    <${tag} ${rowsAttr} id="studentTextAnswer" placeholder="Ketik jawaban Anda di sini..." 
+                    class="w-full p-3.5 border-2 border-slate-200 focus:border-blue-600 rounded-xl bg-slate-50 text-sm outline-none"
+                    oninput="saveAnswer(this.value)">${savedAns}</${tag}>
+                `;
+            } else {
+                let options = q.option || {};
+                let letters = ['a', 'b', 'c', 'd', 'e'];
+                letters.forEach(l => {
+                    let text = options[l];
+                    if (text) {
+                        let isChecked = type === 'complex' ? savedAns.includes(l.toUpperCase()) : savedAns === l.toUpperCase();
+                        let inputType = type === 'complex' ? 'checkbox' : 'radio';
+
+                        optContainer.innerHTML += `
+                            <label class="flex items-center gap-3 p-3.5 rounded-xl border-2 ${isChecked ? 'border-blue-600 bg-blue-50/50' : 'border-slate-200 hover:bg-slate-50'} cursor-pointer transition">
+                                <input type="${inputType}" name="examOpt" value="${l.toUpperCase()}" ${isChecked ? 'checked' : ''} 
+                                onclick="handleOptionSelect('${type}', '${l.toUpperCase()}', this)" class="w-4 h-4 text-blue-600">
+                                <span class="font-bold uppercase text-slate-700 w-5">${l}.</span>
+                                <span class="text-sm text-slate-900">${text}</span>
+                            </label>
+                        `;
+                    }
+                });
+            }
+
+            document.getElementById('btnPrev').style.display = currentIndex === 0 ? 'none' : 'block';
+            if (currentIndex === activeQuestions.length - 1) {
+                document.getElementById('btnNext').classList.add('hidden');
+                document.getElementById('btnSubmit').classList.remove('hidden');
+            } else {
+                document.getElementById('btnNext').classList.remove('hidden');
+                document.getElementById('btnSubmit').classList.add('hidden');
+            }
+
+            renderQuestionNumberGrid();
+        }
+
+        function saveTFAnswer(stmtIdx, val) {
+            if (!studentAnswers[currentIndex] || typeof studentAnswers[currentIndex] !== 'object') {
+                studentAnswers[currentIndex] = {};
+            }
+            studentAnswers[currentIndex][stmtIdx] = val;
+            localStorage.setItem(STORAGE_KEY_ANSWERS, JSON.stringify(studentAnswers));
+            renderQuestionNumberGrid();
+            renderQuestion();
+        }
+
+        function saveAnswer(val) {
+            studentAnswers[currentIndex] = val;
+            localStorage.setItem(STORAGE_KEY_ANSWERS, JSON.stringify(studentAnswers));
+            renderQuestionNumberGrid();
+        }
+
+        function handleOptionSelect(type, val, el) {
+            if (type === 'complex') {
+                if (!Array.isArray(studentAnswers[currentIndex])) studentAnswers[currentIndex] = [];
+                if (el.checked) {
+                    if (!studentAnswers[currentIndex].includes(val)) studentAnswers[currentIndex].push(val);
+                } else {
+                    studentAnswers[currentIndex] = studentAnswers[currentIndex].filter(item => item !== val);
+                }
+            } else {
+                studentAnswers[currentIndex] = val;
+            }
+            localStorage.setItem(STORAGE_KEY_ANSWERS, JSON.stringify(studentAnswers));
+            renderQuestion();
+        }
+
+        function nextQuestion() {
+            if (currentIndex < activeQuestions.length - 1) {
+                currentIndex++;
+                localStorage.setItem(STORAGE_KEY_INDEX, currentIndex);
+                renderQuestion();
+            }
+        }
+
+        function prevQuestion() {
+            if (currentIndex > 0) {
+                currentIndex--;
+                localStorage.setItem(STORAGE_KEY_INDEX, currentIndex);
+                renderQuestion();
+            }
+        }
+
+        function confirmSubmitExam() {
+            Swal.fire({
+                title: 'Kumpulkan Ujian?',
+                text: 'Pastikan seluruh soal telah dijawab dengan teliti.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#059669',
+                cancelButtonColor: '#64748b',
+                confirmButtonText: 'Ya, Kumpulkan Sekarang',
+                cancelButtonText: 'Periksa Kembali'
+            }).then((res) => {
+                if (res.isConfirmed) {
+                    submitExamData(false);
+                }
+            });
+        }
+
+        async function submitExamData(isTimeOut = false) {
+            if (examTimerInterval) clearInterval(examTimerInterval);
+            if (!isTimeOut) {
+                Swal.fire({ title: 'Menghitung Skor...', html: 'Menyimpan hasil ujian ke database...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            }
+
+            let score = 0;
+            let total = activeQuestions.length;
+
+            activeQuestions.forEach((q, idx) => {
+                let userAns = studentAnswers[idx];
+                let correctAns = (q.correct_answer || '').trim().toUpperCase();
+                let type = (q.question_type || 'pilgan').toLowerCase();
+
+                if (userAns) {
+                    if (type === 'pilgan' || type === 'isian') {
+                        if (String(userAns).trim().toUpperCase() === correctAns) score += (100 / total);
+                    } else if (type === 'complex') {
+                        if (Array.isArray(userAns)) {
+                            let userAnsStr = userAns.sort().join(', ');
+                            let correctAnsStr = correctAns.split(',').map(s => s.trim().toUpperCase()).sort().join(', ');
+                            if (userAnsStr === correctAnsStr) score += (100 / total);
+                        }
+                    } else if (type === 'truefalse') {
+                        let isCorrectAll = true;
+                        let stmtIdx = 1;
+                        for (let k in (q.option || {})) {
+                            if (q.option[k]) {
+                                let expectedToken = `${stmtIdx}:${userAns[stmtIdx] || 'X'}`;
+                                if (!correctAns.includes(expectedToken)) isCorrectAll = false;
+                                stmtIdx++;
+                            }
+                        }
+                        if (isCorrectAll) score += (100 / total);
+                    } else {
+                        score += 80;
+                    }
+                }
+            });
+
+            let finalScore = Math.round(score);
+            let studentFullName = localStorage.getItem(STORAGE_KEY_NAME) || 'Siswa Tanpa Nama';
+            
+            let analysisText = "";
+            let handlingText = "";
+            if (finalScore >= 85) {
+                analysisText = "Penguasaan konsep materi dasar, literasi, dan numerasi sangat baik.";
+                handlingText = "Pertahankan prestasi, berikan pengayaan soal HOTS tingkat lanjut.";
+            } else if (finalScore >= 70) {
+                analysisText = "Cukup baik, namun masih ada kekurangan pada penalaran analisis soal cerita/kompleks.";
+                handlingText = "Perlu bimbingan pada analisis soal penalaran serta latihan literasi mendalam.";
+            } else {
+                analysisText = "Penguasaan materi dasar masih kurang, pemahaman konsep materi belum tuntas.";
+                handlingText = "Lakukan remedial total, bimbingan intensif materi dasar, dan pendampingan personal.";
+            }
+
+            let evaluationHTML = `<strong>Analisis Kekurangan:</strong> ${analysisText}<br><strong>Cara Penanganan:</strong> ${handlingText}`;
+
+            await supabaseClient.from('live_sessions').upsert([{ 
+                student_id: studentFullName, 
+                status: 'finished', 
+                updated_at: new Date() 
+            }], { onConflict: 'student_id' });
+
+            const { error } = await supabaseClient.from('exam_results').insert([{
+                student_id: studentFullName,
+                score: finalScore,
+                detailed_answers: studentAnswers,
+                strengths_weaknesses: evaluationHTML
+            }]);
+
+            if (error) {
+                Swal.fire('Gagal Menyimpan', 'Terjadi kendala saat mengirim hasil ke database: ' + error.message, 'error');
+                return;
+            }
+
+            clearAllExamStorage();
+
+            Swal.fire({
+                icon: 'success',
+                title: 'Hasil Ujian & Analisis Mendetail',
+                html: `
+                    <div class="text-left space-y-2 mt-2 bg-slate-50 p-4 rounded-xl border text-sm">
+                        <p><strong>Nama:</strong> ${studentFullName}</p>
+                        <p><strong>Skor Akhir:</strong> <span class="text-2xl font-extrabold text-emerald-600">${finalScore}</span></p>
+                        <hr class="my-2">
+                        <p><strong>Analisis Kekurangan:</strong><br>${analysisText}</p>
+                        <p class="mt-2"><strong>Cara Penanganan / Tindak Lanjut:</strong><br><span class="text-blue-700 font-semibold">${handlingText}</span></p>
+                    </div>
+                `,
+                confirmButtonText: 'Keluar / Tinggalkan Halaman',
+                showCancelButton: true,
+                cancelButtonText: 'Tetap di Halaman',
+                confirmButtonColor: '#2563eb',
+                cancelButtonColor: '#64748b',
+                allowOutsideClick: false
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    window.location.href = 'index.html';
+                } else {
+                    document.getElementById('sectionExamRoom').innerHTML = `
+                        <div class="pro-card rounded-2xl p-8 text-center space-y-4">
+                            <h2 class="text-2xl font-extrabold text-slate-900">Ujian Telah Selesai</h2>
+                            <p class="text-slate-600 text-sm">Anda telah menyelesaikan ujian dengan skor <strong>${finalScore}</strong>.</p>
+                            <div class="bg-blue-50 border border-blue-200 p-4 rounded-xl text-xs text-blue-800 text-left space-y-2">
+                                <p><strong>Analisis Kekurangan:</strong> ${analysisText}</p>
+                                <p><strong>Cara Penanganan:</strong> ${handlingText}</p>
+                            </div>
+                            <button onclick="window.location.href='index.html'" class="px-6 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-xs shadow-md">Kembali ke Beranda</button>
+                        </div>
+                    `;
+                }
+            });
+        }
+
+        function clearAllExamStorage() {
+            localStorage.removeItem(STORAGE_KEY_ANSWERS);
+            localStorage.removeItem(STORAGE_KEY_INDEX);
+            localStorage.removeItem(STORAGE_KEY_SESSION);
+            localStorage.removeItem(STORAGE_KEY_TOKEN);
+            localStorage.removeItem(STORAGE_KEY_START_TIME);
+            localStorage.removeItem(STORAGE_KEY_NAME);
+            localStorage.removeItem(STORAGE_KEY_QUESTIONS);
+            localStorage.removeItem('tkad_current_user');
+        }
+
+        window.addEventListener('DOMContentLoaded', async () => {
+            let savedName = localStorage.getItem(STORAGE_KEY_NAME);
+            if (savedName) {
+                document.getElementById('studentNameInput').value = savedName;
+                document.getElementById('studentNameInput').readOnly = true;
+                document.getElementById('studentNameInput').classList.add('bg-slate-200', 'cursor-not-allowed');
+                document.getElementById('verifyTitle').textContent = `Masukkan Token Ujian`;
+                document.getElementById('tokenInfoSub').textContent = `Halo ${savedName}, masukkan token terbaru dari pengawas untuk melanjutkan ujian.`;
+            }
+
+            if (localStorage.getItem(STORAGE_KEY_SESSION) === 'true') {
+                let savedToken = localStorage.getItem(STORAGE_KEY_TOKEN);
+                const { data: tokenData } = await supabaseClient.from('system_settings').select('*').eq('key', 'active_token').single();
+
+                if (!tokenData || tokenData.value !== savedToken) {
+                    localStorage.removeItem(STORAGE_KEY_SESSION);
+                    localStorage.removeItem(STORAGE_KEY_TOKEN);
+                    document.getElementById('sectionTokenVerify').classList.remove('hidden');
+                    document.getElementById('sectionExamRoom').classList.add('hidden');
+                    return;
+                }
+
+                let savedQuestionsJSON = localStorage.getItem(STORAGE_KEY_QUESTIONS);
+                if (savedQuestionsJSON) {
+                    try {
+                        activeQuestions = JSON.parse(savedQuestionsJSON);
+                        launchExamRoom();
+                        return;
+                    } catch(e) {}
+                }
+
+                const { data: questions } = await supabaseClient.from('questions').select('*').eq('is_active', true);
+                if (questions && questions.length > 0) {
+                    activeQuestions = shuffleArray(questions);
+                    localStorage.setItem(STORAGE_KEY_QUESTIONS, JSON.stringify(activeQuestions));
+                    launchExamRoom();
+                }
+            }
+        });
+    </script>
+</body>
+</html><!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ujian Siswa - Aplikasi TKAS SDN Adiwerna 3</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        * { font-family: 'Plus Jakarta Sans', sans-serif; }
+        body { background: linear-gradient(135deg, #f0f4f8, #e2e8f0); min-height: 100vh; }
+        .pro-card { background: #ffffff; border: 1px solid rgba(226, 232, 240, 0.8); box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05); }
+        .gradient-header { background: linear-gradient(135deg, #1e3a8a, #2563eb); }
+    </style>
+</head>
+<body class="flex flex-col min-h-screen text-slate-800">
+
+    <header class="gradient-header text-white sticky top-0 z-30 px-6 py-4 shadow-md">
+        <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-3">
+                <div class="bg-white/10 backdrop-blur-md text-white font-extrabold px-3.5 py-2 rounded-xl text-sm border border-white/20">Siswa</div>
+                <div>
+                    <h1 class="text-lg font-bold tracking-wide" id="studentWelcomeTitle">Ruang Ujian Siswa TKAS</h1>
+                    <p class="text-xs text-blue-200">SDN Adiwerna 3 &bull; NZ Production</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <div id="examTimerBadge" class="hidden items-center gap-2 bg-red-500/80 backdrop-blur-md px-4 py-1.5 rounded-xl border border-white/20 text-xs font-bold shadow-sm">
+                    <span>⏱️ Sisa Waktu:</span> <span id="examCountdown" class="text-white font-extrabold text-sm">00:00</span>
+                </div>
+                <button id="btnLogout" class="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-xl text-xs font-semibold transition shadow-sm">Keluar</button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-4xl w-full mx-auto p-6 flex-grow flex flex-col gap-6 justify-center">
+        
+        <!-- SECTION VERIFIKASI TOKEN -->
+        <section id="sectionTokenVerify" class="pro-card rounded-2xl p-8 flex flex-col items-center text-center gap-5 max-w-lg mx-auto w-full">
+            <div class="bg-blue-50 text-blue-600 p-4 rounded-full text-3xl">🔐</div>
+            <div>
+                <h2 id="verifyTitle" class="text-xl font-extrabold text-slate-900 mb-1">Verifikasi Token Ujian</h2>
+                <p id="tokenInfoSub" class="text-xs text-slate-500">Masukkan token aktif yang diberikan oleh pengawas.</p>
+            </div>
+            <div class="w-full space-y-3.5 text-left">
+                <div id="nameInputWrapper">
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Nama Lengkap Siswa</label>
+                    <input type="text" id="studentNameInput" placeholder="Ketik nama lengkap Anda..." class="w-full px-4 py-3 border-2 border-slate-200 focus:border-blue-600 rounded-xl text-sm font-bold bg-slate-50 outline-none transition">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-600 mb-1">Token Ujian (6 Digit)</label>
+                    <input type="text" id="tokenInput" placeholder="Ketik token..." maxlength="6" class="w-full px-4 py-3 border-2 border-slate-200 focus:border-blue-600 rounded-xl text-center text-xl font-extrabold uppercase tracking-widest bg-slate-50 outline-none transition">
+                </div>
+                <button onclick="verifyTokenAndStart()" class="w-full py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl shadow-md transition mt-2">Mulai / Lanjutkan Ujian 🚀</button>
+            </div>
+        </section>
+
+        <!-- SECTION RUANG UJIAN -->
+        <section id="sectionExamRoom" class="hidden flex flex-col gap-6">
+            <div class="pro-card rounded-2xl p-6 flex flex-col gap-4">
+                <div class="flex justify-between items-center border-b pb-3">
+                    <span id="questionNumberIndicator" class="text-xs font-extrabold text-blue-600 uppercase tracking-wider">Soal No. 1 dari 10</span>
+                    <span id="questionTypeBadge" class="text-[10px] font-bold uppercase bg-slate-100 text-slate-600 px-2.5 py-1 rounded-md">Pilihan Ganda</span>
+                </div>
+                <div id="questionContainer" class="min-h-[120px] text-base font-semibold text-slate-900 leading-relaxed"></div>
+                <div id="optionsContainer" class="flex flex-col gap-3 pt-2"></div>
+            </div>
+
+            <div class="pro-card rounded-2xl p-4 flex flex-col gap-4">
+                <div class="flex justify-between items-center">
+                    <button onclick="prevQuestion()" id="btnPrev" class="px-5 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs transition">⬅️ Sebelumnya</button>
+                    <button onclick="nextQuestion()" id="btnNext" class="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold text-xs shadow-md transition">Selanjutnya ➡️</button>
+                    <button onclick="confirmSubmitExam()" id="btnSubmit" class="hidden px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold text-xs shadow-md transition">Selesai & Kumpul Ujian 🎯</button>
+                </div>
+                
+                <div class="border-t pt-3">
+                    <p class="text-xs font-bold text-slate-500 mb-2">Daftar Nomor Soal (Klik untuk langsung menuju nomor):</p>
+                    <div id="questionNumberGrid" class="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-50 rounded-xl border"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <script>
+        // Proteksi Role Universal
+        (function() {
+            try {
+                const currentUser = JSON.parse(localStorage.getItem('tkad_current_user') || '{}');
+                if (currentUser.role && currentUser.role !== 'student') {
+                    if (currentUser.role === 'admin') window.location.href = 'admin.html';
+                    else if (currentUser.role === 'teacher') window.location.href = 'teacher.html';
+                    else window.location.href = 'index.html';
+                    return;
+                }
+            } catch (e) {}
+        })();
+
+        const SUPABASE_URL = 'https://xmqrddlcdfrylgzwviuo.supabase.co';
+        const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtcXJkZGxjZGZyeWxnend2aXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNzQyODYsImV4cCI6MjEwNTc1MDI4Nn0.6LJOxROS8uvb2XnnAd924VkvnXv5jpFJTI7mKS8YJ3o'; 
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+        let activeQuestions = [];
+        let currentIndex = 0;
+        let studentAnswers = {};
+        let examTimerInterval = null;
+
+        const STORAGE_KEY_NAME = `tkad_student_fullname`;
+        const STORAGE_KEY_SESSION = `tkad_exam_active_student`;
+        const STORAGE_KEY_TOKEN = `tkad_used_token_student`;
+        const STORAGE_KEY_ANSWERS = `tkad_saved_answers_student`;
+        const STORAGE_KEY_INDEX = `tkad_saved_index_student`;
+        const STORAGE_KEY_START_TIME = `tkad_exam_start_timestamp`;
+        const STORAGE_KEY_QUESTIONS = `tkad_shuffled_questions_student`;
+
+        function shuffleArray(array) {
+            let arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                let j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        document.getElementById('btnLogout').addEventListener('click', () => {
+            Swal.fire({
+                title: 'Keluar Ujian?',
+                text: 'Sesi ujian Anda akan diakhiri.',
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#2563eb',
+                cancelButtonColor: '#dc2626',
+                confirmButtonText: 'Ya, Keluar',
+                cancelButtonText: 'Batal'
             }).then((res) => {
                 if (res.isConfirmed) {
                     clearAllExamStorage();

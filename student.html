@@ -116,8 +116,8 @@
         const STORAGE_KEY_START_TIME = `tkad_exam_start_timestamp`;
         const STORAGE_KEY_QUESTIONS = `tkad_shuffled_questions_student`;
 
-        // --- FITUR KIOSK / FULL SCREEN SEJAK MASUK DASHBOARD SISWA ---
-        function enableExamFullScreen() {
+        // --- SOLUSI AGAR LANGSUNG FULL SCREEN TANPA JEDA ---
+        function enableDashboardFullScreen() {
             let elem = document.documentElement;
             if (elem.requestFullscreen) {
                 elem.requestFullscreen().catch(err => {});
@@ -130,35 +130,45 @@
             }
         }
 
-        // Langsung aktifkan Full Screen saat ada klik pertama di halaman dashboard siswa
-        document.addEventListener('click', function() {
+        // Begitu halaman selesai dimuat, langsung munculkan pop-up selamat datang / tombol "Mulai Sesi Aman"
+        // Ini memaksa interaksi pertama terjadi secara instan sehingga browser mengizinkan Full Screen tanpa jeda janggal.
+        window.addEventListener('DOMContentLoaded', () => {
             if (!document.fullscreenElement && !document.webkitFullscreenElement) {
-                enableExamFullScreen();
+                Swal.fire({
+                    title: 'Mulai Ujian Aman 🛡️',
+                    text: 'Sistem akan membuka layar penuh (Full Screen) demi keamanan ujian.',
+                    icon: 'info',
+                    confirmButtonText: 'Masuk Layar Penuh 🚀',
+                    confirmButtonColor: '#2563eb',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false
+                }).then(() => {
+                    enableDashboardFullScreen();
+                });
             }
-        }, { once: true });
+        });
 
-        document.addEventListener('fullscreenchange', handleExamFullscreenExit);
-        document.addEventListener('webkitfullscreenchange', handleExamFullscreenExit);
-        document.addEventListener('mozfullscreenchange', handleExamFullscreenExit);
-        document.addEventListener('MSFullscreenChange', handleExamFullscreenExit);
+        document.addEventListener('fullscreenchange', handleDashboardFullscreenExit);
+        document.addEventListener('webkitfullscreenchange', handleDashboardFullscreenExit);
+        document.addEventListener('mozfullscreenchange', handleDashboardFullscreenExit);
+        document.addEventListener('MSFullscreenChange', handleDashboardFullscreenExit);
 
-        function handleExamFullscreenExit() {
-            // Selama siswa berada di halaman dashboard siswa (student.html), cegah keluar full screen
+        function handleDashboardFullscreenExit() {
             if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
                 Swal.fire({
                     icon: 'warning',
                     title: 'Peringatan Keamanan Ujian!',
                     text: 'Anda dilarang keluar dari mode layar penuh (Full Screen) selama sesi ujian berlangsung!',
-                    confirmButtonText: 'Kembali ke Ujian',
+                    confirmButtonText: 'Kembali ke Layar Penuh',
                     confirmButtonColor: '#2563eb',
                     allowOutsideClick: false,
                     allowEscapeKey: false
                 }).then(() => {
-                    enableExamFullScreen();
+                    enableDashboardFullScreen();
                 });
             }
         }
-        // ----------------------------------------------------
+        // -----------------------------------------------------------
 
         function shuffleArray(array) {
             let arr = [...array];

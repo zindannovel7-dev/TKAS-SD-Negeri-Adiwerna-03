@@ -441,6 +441,66 @@
             }
         }
 
+        // ==========================================
+        // FITUR TEMPLATE & UPLOAD AKUN PENGGUNA
+        // ==========================================
+        function downloadUserTemplate() {
+            const templateData = [
+                { "Nama": "Ahmad Siswa", "Email": "ahmad@sekolah.id", "Password": "123", "Role": "student" },
+                { "Nama": "Siti Guru", "Email": "siti@sekolah.id", "Password": "123", "Role": "teacher" }
+            ];
+
+            const ws = XLSX.utils.json_to_sheet(templateData);
+            ws['!cols'] = [{wch: 25}, {wch: 30}, {wch: 15}, {wch: 15}];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Template Akun");
+            XLSX.writeFile(wb, "Template_Akun_Pengguna_TKAS.xlsx");
+        }
+
+        async function handleUserExcelUpload(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+
+            Swal.fire({ title: 'Membaca Data Akun...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+
+            try {
+                const data = await file.arrayBuffer();
+                const workbook = XLSX.read(data);
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const rows = XLSX.utils.sheet_to_json(firstSheet);
+
+                let totalAdded = 0;
+                for (let r of rows) {
+                    let rowData = {};
+                    for (let key in r) {
+                        rowData[key.trim().toLowerCase()] = r[key];
+                    }
+
+                    let name = rowData['nama'] || rowData['name'] || '';
+                    let email = String(rowData['email'] || '').toLowerCase().trim();
+                    let password = String(rowData['password'] || rowData['sandi'] || '123');
+                    let role = String(rowData['role'] || 'student').toLowerCase().trim();
+
+                    if (email && name) {
+                        await supabaseClient.from('Users').upsert([{
+                            Name: name,
+                            email: email,
+                            password: password,
+                            role: role
+                        }], { onConflict: 'email' });
+                        totalAdded++;
+                    }
+                }
+
+                Swal.fire('Berhasil!', `Sukses mengimpor ${totalAdded} akun pengguna ke sistem!`, 'success');
+                loadData();
+            } catch (err) {
+                Swal.fire('Gagal Membaca File', 'Pastikan format Excel sesuai dengan template yang disediakan.', 'error');
+            }
+        }
+        // ==========================================
+
         async function loadCardsGrid() {
             const { data: students } = await supabaseClient.from('Users').select('*');
             const container = document.getElementById('printArea');

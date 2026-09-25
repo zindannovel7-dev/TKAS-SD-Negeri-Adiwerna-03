@@ -116,6 +116,45 @@
         const STORAGE_KEY_START_TIME = `tkad_exam_start_timestamp`;
         const STORAGE_KEY_QUESTIONS = `tkad_shuffled_questions_student`;
 
+        // --- FITUR KIOSK / FULL SCREEN SAAT UJIAN DIMULAI ---
+        function enableExamFullScreen() {
+            let elem = document.documentElement;
+            if (elem.requestFullscreen) {
+                elem.requestFullscreen().catch(err => {});
+            } else if (elem.mozRequestFullScreen) {
+                elem.mozRequestFullScreen();
+            } else if (elem.webkitRequestFullscreen) {
+                elem.webkitRequestFullscreen();
+            } else if (elem.msRequestFullscreen) {
+                elem.msRequestFullscreen();
+            }
+        }
+
+        document.addEventListener('fullscreenchange', handleExamFullscreenExit);
+        document.addEventListener('webkitfullscreenchange', handleExamFullscreenExit);
+        document.addEventListener('mozfullscreenchange', handleExamFullscreenExit);
+        document.addEventListener('MSFullscreenChange', handleExamFullscreenExit);
+
+        function handleExamFullscreenExit() {
+            // Hanya berikan peringatan jika siswa sudah masuk ke ruang ujian (session aktif)
+            if (localStorage.getItem(STORAGE_KEY_SESSION) === 'true') {
+                if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'Peringatan Keamanan Ujian!',
+                        text: 'Anda dilarang keluar dari mode layar penuh (Full Screen) selama ujian berlangsung!',
+                        confirmButtonText: 'Kembali ke Ujian',
+                        confirmButtonColor: '#2563eb',
+                        allowOutsideClick: false,
+                        allowEscapeKey: false
+                    }).then(() => {
+                        enableExamFullScreen();
+                    });
+                }
+            }
+        }
+        // ----------------------------------------------------
+
         function shuffleArray(array) {
             let arr = [...array];
             for (let i = arr.length - 1; i > 0; i--) {
@@ -169,7 +208,6 @@
                 return;
             }
 
-            // Validasi Sesi Aktif Perangkat (Mencegah akun lain mengetik nama sembarangan)
             let currentUser = {};
             try {
                 currentUser = JSON.parse(localStorage.getItem('tkad_current_user') || '{}');
@@ -186,7 +224,6 @@
 
             Swal.fire({ title: 'Memeriksa Status & Akun...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
-            // 1. Cek Apakah Siswa Sudah Pernah Menyelesaikan Ujian (One-Time Attempt)
             const { data: existingResult } = await supabaseClient
                 .from('exam_results')
                 .select('*')
@@ -203,7 +240,6 @@
                 return;
             }
 
-            // 2. Validasi ke Database Tabel 'Users'
             const { data: userRecords } = await supabaseClient.from('Users').select('*');
             if (userRecords) {
                 let studentList = userRecords.filter(u => (u.role || '').toLowerCase() === 'student');
@@ -220,7 +256,6 @@
                 }
             }
 
-            // 3. Verifikasi Token Aktif ke Database
             const { data: tokenData } = await supabaseClient.from('system_settings').select('*').eq('key', 'active_token').single();
             if (!tokenData || tokenData.value !== inputToken) {
                 Swal.fire('Token Salah', 'Token ujian tidak valid atau belum aktif.', 'error');
@@ -261,6 +296,9 @@
                 status: 'exam', 
                 updated_at: new Date() 
             }], { onConflict: 'student_id' });
+
+            // AKTIFKAN FULL SCREEN OTOMATIS SAAT TOKEN VALID & MASUK UJIAN
+            enableExamFullScreen();
 
             launchExamRoom();
         }

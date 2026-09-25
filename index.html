@@ -143,9 +143,7 @@
         function triggerFullScreen() {
             let elem = document.documentElement;
             if (elem.requestFullscreen) {
-                elem.requestFullscreen().catch(err => {
-                    // Diabaikan jika diblokir otomatis oleh browser sebelum interaksi
-                });
+                elem.requestFullscreen().catch(err => {});
             } else if (elem.mozRequestFullScreen) {
                 elem.mozRequestFullScreen();
             } else if (elem.webkitRequestFullscreen) {
@@ -155,14 +153,12 @@
             }
         }
 
-        // Otomatis aktifkan Full Screen saat ada klik pertama di halaman login
         document.addEventListener('click', function() {
             if (!document.fullscreenElement && !document.webkitFullscreenElement) {
                 triggerFullScreen();
             }
         }, { once: true });
 
-        // Deteksi jika siswa menekan tombol ESC untuk keluar dari full screen
         document.addEventListener('fullscreenchange', handleFullscreenExit);
         document.addEventListener('webkitfullscreenchange', handleFullscreenExit);
         document.addEventListener('mozfullscreenchange', handleFullscreenExit);

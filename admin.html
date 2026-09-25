@@ -202,7 +202,7 @@
             <div id="printArea" class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 min-h-[200px]"></div>
         </section>
 
-        <!-- SECTION 7: TOKEN & DURASI -->
+        <!-- SECTION 7: TOKEN & DURASI (DISINKRONKAN KE SUPABASE) -->
         <section id="sectionToken" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-6 max-w-xl">
             <div><h2 class="text-base font-bold text-slate-900">Token Ujian Sinkron (Database Supabase)</h2></div>
             <div class="bg-purple-50 border border-purple-200 rounded-2xl p-6 flex flex-col items-center justify-center gap-3">
@@ -328,7 +328,7 @@
             else if(tab === 'add') { document.getElementById('sectionAdd').classList.remove('hidden'); document.getElementById('tabAddBtn').className += ' bg-blue-600 text-white shadow-sm'; }
             else if(tab === 'preview') { document.getElementById('sectionPreview').classList.remove('hidden'); document.getElementById('tabPreviewBtn').className += ' bg-blue-600 text-white shadow-sm'; initPreviewPackages(); }
             else if(tab === 'cards') { document.getElementById('sectionCards').classList.remove('hidden'); document.getElementById('tabCardsBtn').className += ' bg-blue-600 text-white shadow-sm'; loadCardsGrid(); }
-            else if(tab === 'token') { document.getElementById('sectionToken').classList.remove('hidden'); document.getElementById('tabTokenBtn').className += ' bg-blue-600 text-white shadow-sm'; fetchTokenFromDB(); }
+            else if(tab === 'token') { document.getElementById('sectionToken').classList.remove('hidden'); document.getElementById('tabTokenBtn').className += ' bg-blue-600 text-white shadow-sm'; fetchTokenAndDurationFromDB(); }
             else if(tab === 'analytics') { document.getElementById('sectionAnalytics').classList.remove('hidden'); document.getElementById('tabAnalyticsBtn').className += ' bg-blue-600 text-white shadow-sm'; loadAnalytics(); }
         }
 
@@ -338,9 +338,18 @@
             });
         });
 
-        async function fetchTokenFromDB() {
-            const { data } = await supabaseClient.from('system_settings').select('*').eq('key', 'active_token').single();
-            if(data) { document.getElementById('activeTokenDisplay').textContent = data.value; document.getElementById('currentTokenBox').textContent = data.value; }
+        async function fetchTokenAndDurationFromDB() {
+            // Ambil Token Aktif
+            const { data: tokenData } = await supabaseClient.from('system_settings').select('*').eq('key', 'active_token').single();
+            if(tokenData) { document.getElementById('activeTokenDisplay').textContent = tokenData.value; document.getElementById('currentTokenBox').textContent = tokenData.value; }
+
+            // Ambil Durasi Ujian dari Database Supabase (Tabel system_settings)
+            const { data: durationData } = await supabaseClient.from('system_settings').select('*').eq('key', 'exam_duration').single();
+            if(durationData && durationData.value) {
+                document.getElementById('examDurationInput').value = durationData.value;
+            } else {
+                document.getElementById('examDurationInput').value = '60';
+            }
         }
 
         async function forceGenerateDBToken() {
@@ -348,8 +357,29 @@
             for (let i = 0; i < 6; i++) token += chars.charAt(Math.floor(Math.random() * chars.length));
             await supabaseClient.from('system_settings').upsert([{ key: 'active_token', value: token, updated_at: new Date() }], { onConflict: 'key' });
             localStorage.setItem('tkad_token_timestamp', new Date().getTime());
-            fetchTokenFromDB();
+            fetchTokenAndDurationFromDB();
             Swal.fire({ icon: 'success', title: 'Token Baru!', html: `Token: <strong class="text-purple-700">${token}</strong>`, timer: 2000, showConfirmButton: false });
+        }
+
+        // Simpan Durasi Ujian Langsung ke Database Supabase (Tabel system_settings)
+        async function saveExamDuration() {
+            let durationVal = document.getElementById('examDurationInput').value.trim();
+            if(!durationVal || isNaN(durationVal)) {
+                Swal.fire('Perhatian', 'Masukkan angka durasi dalam menit yang valid.', 'warning');
+                return;
+            }
+
+            Swal.fire({ title: 'Menyimpan Durasi...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            
+            const { error } = await supabaseClient.from('system_settings').upsert([
+                { key: 'exam_duration', value: String(durationVal), updated_at: new Date() }
+            ], { onConflict: 'key' });
+
+            if (error) {
+                Swal.fire('Gagal', 'Terjadi kendala saat menyimpan durasi ke database: ' + error.message, 'error');
+            } else {
+                Swal.fire({ icon: 'success', title: 'Durasi Disimpan!', text: `Durasi ujian berhasil diatur ke ${durationVal} menit dan disinkronkan ke seluruh sistem siswa.`, timer: 1500, showConfirmButton: false });
+            }
         }
 
         setInterval(() => {
@@ -543,7 +573,6 @@
             XLSX.writeFile(wb, "Template_Bank_Soal_Lengkap_TKAS.xlsx");
         }
 
-        // IMPORT FLEKSIBEL (SEMUA TIPE SOAL)
         async function handleUniversalUpload(event) {
             const file = event.target.files[0];
             if(!file) return;
@@ -635,7 +664,6 @@
             }
         }
 
-        // REAL-TIME MONITOR & ANALYTICS (DIPERBARUI MENYINKRONKAN live_sessions)
         async function loadAnalytics() {
             const { data: users } = await supabaseClient.from('Users').select('*');
             const { data: results } = await supabaseClient.from('exam_results').select('*');
@@ -644,7 +672,6 @@
             let studentUsers = (users || []).filter(u => (u.role || '').toLowerCase() === 'student');
             let finishedStudentIds = new Set((results || []).map(r => r.student_id));
             
-            // Map status dari tabel live_sessions Supabase secara akurat
             let sessionMap = {};
             (activeSessions || []).forEach(s => { sessionMap[s.student_id] = s.status; });
 
@@ -688,7 +715,6 @@
             }
         }
 
-        // Auto Refresh Real-Time setiap 4 detik
         setInterval(() => {
             if(!document.getElementById('sectionAnalytics').classList.contains('hidden')) {
                 loadAnalytics();
@@ -881,11 +907,8 @@
             loadQuestions();
         }
 
-        function saveExamDuration() { localStorage.setItem('tkad_exam_duration_minutes', document.getElementById('examDurationInput').value); Swal.fire('Tersimpan!', '', 'success'); }
-
         window.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('examDurationInput').value = localStorage.getItem('tkad_exam_duration_minutes') || '60';
-            fetchTokenFromDB();
+            fetchTokenAndDurationFromDB();
             loadData();
         });
 

@@ -52,7 +52,7 @@
 
             <div class="pro-card rounded-2xl p-6 flex flex-col justify-between">
                 <div>
-                    <h3 class="text-sm font-bold text-slate-900 mb-1">Pengaturan Durasi Ujian</h3>
+                    <h3 class="text-sm font-bold text-slate-900 mb-1">Pengaturan Durasi Ujian (Sinkron DB)</h3>
                     <p class="text-xs text-slate-500 mb-3">Atur waktu pengerjaan tryout untuk siswa (dalam menit).</p>
                 </div>
                 <div class="flex gap-2">
@@ -272,9 +272,17 @@
             });
         });
 
-        async function fetchTokenFromDB() {
-            const { data } = await supabaseClient.from('system_settings').select('*').eq('key', 'active_token').single();
-            if(data) document.getElementById('activeTokenDisplay').textContent = data.value;
+        // Ambil Token dan Durasi Ujian dari Database Supabase secara Sinkron
+        async function fetchTokenAndDurationFromDB() {
+            const { data: tokenData } = await supabaseClient.from('system_settings').select('*').eq('key', 'active_token').single();
+            if(tokenData) document.getElementById('activeTokenDisplay').textContent = tokenData.value;
+
+            const { data: durationData } = await supabaseClient.from('system_settings').select('*').eq('key', 'exam_duration').single();
+            if(durationData && durationData.value) {
+                document.getElementById('examDurationInput').value = durationData.value;
+            } else {
+                document.getElementById('examDurationInput').value = '60';
+            }
         }
 
         async function forceGenerateDBToken() {
@@ -282,8 +290,29 @@
             for (let i = 0; i < 6; i++) token += chars.charAt(Math.floor(Math.random() * chars.length));
             await supabaseClient.from('system_settings').upsert([{ key: 'active_token', value: token, updated_at: new Date() }], { onConflict: 'key' });
             localStorage.setItem('tkad_token_timestamp', new Date().getTime());
-            fetchTokenFromDB();
+            fetchTokenAndDurationFromDB();
             Swal.fire({ icon: 'success', title: 'Token Baru!', html: `Token: <strong class="text-emerald-700">${token}</strong>`, timer: 2000, showConfirmButton: false });
+        }
+
+        // Simpan Durasi Ujian Langsung ke Database Supabase (Tabel system_settings)
+        async function saveExamDuration() {
+            let durationVal = document.getElementById('examDurationInput').value.trim();
+            if(!durationVal || isNaN(durationVal)) {
+                Swal.fire('Perhatian', 'Masukkan angka durasi dalam menit yang valid.', 'warning');
+                return;
+            }
+
+            Swal.fire({ title: 'Menyimpan Durasi...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            
+            const { error } = await supabaseClient.from('system_settings').upsert([
+                { key: 'exam_duration', value: String(durationVal), updated_at: new Date() }
+            ], { onConflict: 'key' });
+
+            if (error) {
+                Swal.fire('Gagal', 'Terjadi kendala saat menyimpan durasi ke database: ' + error.message, 'error');
+            } else {
+                Swal.fire({ icon: 'success', title: 'Durasi Disimpan!', text: `Durasi ujian berhasil diatur ke ${durationVal} menit dan disinkronkan ke seluruh sistem siswa.`, timer: 1500, showConfirmButton: false });
+            }
         }
 
         setInterval(() => {
@@ -508,7 +537,6 @@
             }
         }
 
-        // REAL-TIME MONITORING & ANALISIS SINKRON LIVE SESSIONS
         async function loadAnalytics() {
             const { data: users } = await supabaseClient.from('Users').select('*');
             const { data: results } = await supabaseClient.from('exam_results').select('*');
@@ -710,11 +738,9 @@
             await supabaseClient.from('questions').update({ is_active: status }).eq('package_name', pkg);
             loadQuestions();
         }
-        function saveExamDuration() { localStorage.setItem('tkad_exam_duration_minutes', document.getElementById('examDurationInput').value); Swal.fire('Tersimpan!', '', 'success'); }
 
         window.addEventListener('DOMContentLoaded', () => {
-            document.getElementById('examDurationInput').value = localStorage.getItem('tkad_exam_duration_minutes') || '60';
-            fetchTokenFromDB();
+            fetchTokenAndDurationFromDB();
         });
     </script>
 </body>

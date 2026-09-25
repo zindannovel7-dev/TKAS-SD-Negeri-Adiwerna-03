@@ -116,7 +116,7 @@
         const STORAGE_KEY_START_TIME = `tkad_exam_start_timestamp`;
         const STORAGE_KEY_QUESTIONS = `tkad_shuffled_questions_student`;
 
-        // --- FITUR KIOSK / FULL SCREEN SAAT UJIAN DIMULAI ---
+        // --- FITUR KIOSK / FULL SCREEN SEJAK MASUK DASHBOARD SISWA ---
         function enableExamFullScreen() {
             let elem = document.documentElement;
             if (elem.requestFullscreen) {
@@ -130,27 +130,32 @@
             }
         }
 
+        // Langsung aktifkan Full Screen saat ada klik pertama di halaman dashboard siswa
+        document.addEventListener('click', function() {
+            if (!document.fullscreenElement && !document.webkitFullscreenElement) {
+                enableExamFullScreen();
+            }
+        }, { once: true });
+
         document.addEventListener('fullscreenchange', handleExamFullscreenExit);
         document.addEventListener('webkitfullscreenchange', handleExamFullscreenExit);
         document.addEventListener('mozfullscreenchange', handleExamFullscreenExit);
         document.addEventListener('MSFullscreenChange', handleExamFullscreenExit);
 
         function handleExamFullscreenExit() {
-            // Hanya berikan peringatan jika siswa sudah masuk ke ruang ujian (session aktif)
-            if (localStorage.getItem(STORAGE_KEY_SESSION) === 'true') {
-                if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
-                    Swal.fire({
-                        icon: 'warning',
-                        title: 'Peringatan Keamanan Ujian!',
-                        text: 'Anda dilarang keluar dari mode layar penuh (Full Screen) selama ujian berlangsung!',
-                        confirmButtonText: 'Kembali ke Ujian',
-                        confirmButtonColor: '#2563eb',
-                        allowOutsideClick: false,
-                        allowEscapeKey: false
-                    }).then(() => {
-                        enableExamFullScreen();
-                    });
-                }
+            // Selama siswa berada di halaman dashboard siswa (student.html), cegah keluar full screen
+            if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.mozFullScreenElement && !document.msFullscreenElement) {
+                Swal.fire({
+                    icon: 'warning',
+                    title: 'Peringatan Keamanan Ujian!',
+                    text: 'Anda dilarang keluar dari mode layar penuh (Full Screen) selama sesi ujian berlangsung!',
+                    confirmButtonText: 'Kembali ke Ujian',
+                    confirmButtonColor: '#2563eb',
+                    allowOutsideClick: false,
+                    allowEscapeKey: false
+                }).then(() => {
+                    enableExamFullScreen();
+                });
             }
         }
         // ----------------------------------------------------
@@ -296,9 +301,6 @@
                 status: 'exam', 
                 updated_at: new Date() 
             }], { onConflict: 'student_id' });
-
-            // AKTIFKAN FULL SCREEN OTOMATIS SAAT TOKEN VALID & MASUK UJIAN
-            enableExamFullScreen();
 
             launchExamRoom();
         }

@@ -435,7 +435,6 @@
             }
         }
 
-        // --- UPDATE: KARTU PESERTA DENGAN PASSWORD/SANDI ---
         async function loadCardsGrid() {
             const { data: students } = await supabaseClient.from('Users').select('*');
             const container = document.getElementById('printArea');
@@ -545,6 +544,9 @@
             let opt_d = document.getElementById('optD') ? document.getElementById('optD').value : '';
             let opt_e = document.getElementById('optE') ? document.getElementById('optE').value : '';
 
+            // Nonaktifkan semua paket lain agar paket baru menjadi satu-satunya yang aktif
+            await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', packageName);
+
             await supabaseClient.from('questions').insert([{
                 question_text: question, correct_answer: answer, question_type: type,
                 package_name: packageName, is_active: true, image_url: imgBase64, 
@@ -583,6 +585,9 @@
             Swal.fire({ title: 'Membaca & Menganalisis Dokumen...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
             try {
+                // Nonaktifkan semua paket lama sebelum meng-upload paket baru
+                await supabaseClient.from('questions').update({ is_active: false }).not('package_name', 'is', null);
+
                 let totalImported = 0;
 
                 if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
@@ -619,7 +624,7 @@
                                 question_type: finalType,
                                 correct_answer: String(ans),
                                 package_name: packageNameInput,
-                                is_active: true,
+                                is_active: true, // Paket yang baru di-upload otomatis aktif
                                 image_url: '',
                                 option: { a: String(optA), b: String(optB), c: String(optC), d: String(optD), e: String(optE) }
                             }]);
@@ -644,7 +649,7 @@
                             question_type: 'pilgan',
                             correct_answer: 'A',
                             package_name: packageNameInput,
-                            is_active: true,
+                            is_active: true, // Paket yang baru di-upload otomatis aktif
                             image_url: '',
                             option: { a: 'Pilihan A', b: 'Pilihan B', c: 'Pilihan C', d: 'Pilihan D', e: '' }
                         }]);
@@ -653,7 +658,7 @@
                 }
 
                 if (totalImported > 0) {
-                    Swal.fire('Berhasil!', `Sukses mengimpor ${totalImported} soal ke paket "${packageNameInput}"!`, 'success');
+                    Swal.fire('Berhasil!', `Sukses mengimpor ${totalImported} soal ke paket "${packageNameInput}" dan menjadikannya paket aktif!`, 'success');
                     switchTab('questions');
                 } else {
                     throw new Error("File kosong atau format tidak terbaca.");
@@ -720,12 +725,24 @@
             }
         }, 4000);
 
+        // --- UPDATE: PREVIEW OTOMATIS MEMILIH PAKET YANG AKTIF ---
         async function initPreviewPackages() {
-            const { data: qs } = await supabaseClient.from('questions').select('package_name');
-            if(qs) {
+            const { data: qs } = await supabaseClient.from('questions').select('package_name, is_active');
+            if(qs && qs.length > 0) {
                 let packages = [...new Set(qs.map(q => q.package_name || 'Paket A'))];
-                document.getElementById('previewPackageSelect').innerHTML = packages.map(p => `<option value="${p}">${p}</option>`).join('');
+                
+                // Cari paket yang sedang berstatus aktif (is_active = true)
+                let activePkgObj = qs.find(q => q.is_active === true);
+                let defaultPackage = activePkgObj ? (activePkgObj.package_name || 'Paket A') : packages[0];
+
+                document.getElementById('previewPackageSelect').innerHTML = packages.map(p => 
+                    `<option value="${p}" ${p === defaultPackage ? 'selected' : ''}>${p} ${p === defaultPackage ? '(Aktif 🌟)' : ''}</option>`
+                ).join('');
+                
                 loadPreviewQuestions();
+            } else {
+                document.getElementById('previewPackageSelect').innerHTML = `<option value="">Tidak ada paket</option>`;
+                document.getElementById('previewContainer').innerHTML = `<p class="text-center text-slate-400 py-10">Tidak ada soal.</p>`;
             }
         }
 
@@ -901,7 +918,9 @@
         async function deleteUser(email) { await supabaseClient.from('Users').delete().eq('email', email); loadData(); }
 
         async function togglePackageStatus(pkg, status) {
-            if(status) await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', pkg);
+            if (status) {
+                await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', pkg);
+            }
             await supabaseClient.from('questions').update({ is_active: status }).eq('package_name', pkg);
             loadQuestions();
         }

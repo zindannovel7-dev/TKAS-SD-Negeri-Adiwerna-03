@@ -26,7 +26,7 @@
 </head>
 <body class="flex flex-col min-h-screen text-slate-800">
 
-    <!-- Proteksi Role Universal untuk Admin: Mencegah Role Lain Masuk -->
+    <!-- Proteksi Role Universal untuk Admin -->
     <script>
         (function() {
             try {
@@ -116,9 +116,17 @@
 
         <!-- SECTION 2: QUESTIONS -->
         <section id="sectionQuestions" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-5">
-            <div class="flex justify-between items-center">
-                <div><h2 class="text-base font-bold text-slate-900">Manajemen Paket Soal & Edit Soal</h2></div>
-                <button onclick="deleteAllQuestions()" class="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold">🗑️ Hapus Semua Bank Soal</button>
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-base font-bold text-slate-900">Manajemen Paket Soal & Edit Soal</h2>
+                    <select id="filterPackageSelect" onchange="loadQuestions()" class="px-3 py-1.5 border rounded-xl text-xs font-bold bg-slate-50 outline-none">
+                        <option value="ALL">Semua Paket</option>
+                    </select>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="deleteSelectedPackage()" id="btnDeletePackage" class="bg-amber-100 text-amber-800 px-4 py-2 rounded-xl text-xs font-bold hidden">🗑️ Hapus Paket Terpilih Ini</button>
+                    <button onclick="deleteAllQuestions()" class="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold">🗑️ Hapus Semua Bank Soal</button>
+                </div>
             </div>
             <div class="overflow-x-auto rounded-xl border border-slate-200">
                 <table class="w-full text-left border-collapse text-sm">
@@ -202,7 +210,7 @@
             <div id="printArea" class="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 min-h-[200px]"></div>
         </section>
 
-        <!-- SECTION 7: TOKEN & DURASI (DISINKRONKAN KE SUPABASE) -->
+        <!-- SECTION 7: TOKEN & DURASI -->
         <section id="sectionToken" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-6 max-w-xl">
             <div><h2 class="text-base font-bold text-slate-900">Token Ujian Sinkron (Database Supabase)</h2></div>
             <div class="bg-purple-50 border border-purple-200 rounded-2xl p-6 flex flex-col items-center justify-center gap-3">
@@ -232,7 +240,6 @@
                 <button onclick="deleteAllExamResults()" class="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold">🗑️ Hapus Rekap Nilai</button>
             </div>
             
-            <!-- LIVE REAL-TIME CARDS -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col">
                     <span class="text-xs font-bold text-amber-700 uppercase">1. Sedang Login (Input Token)</span>
@@ -251,7 +258,6 @@
                 </div>
             </div>
 
-            <!-- TABEL ANALISIS NILAI -->
             <div class="overflow-x-auto rounded-xl border border-slate-200 mt-4">
                 <table class="w-full text-left border-collapse text-sm">
                     <thead>
@@ -462,7 +468,30 @@
             const { data: qs } = await supabaseClient.from('questions').select('*');
             if(qs) {
                 document.getElementById('totalQuestions').textContent = qs.length;
-                document.getElementById('questionTableBody').innerHTML = qs.length ? qs.map(q => `
+                
+                // Update Filter Paket Dropdown
+                let packages = [...new Set(qs.map(q => q.package_name || 'Paket A'))];
+                let filterSelect = document.getElementById('filterPackageSelect');
+                let currentVal = filterSelect.value;
+                
+                filterSelect.innerHTML = `<option value="ALL">Semua Paket (${qs.length})</option>` + packages.map(p => {
+                    let count = qs.filter(q => (q.package_name || 'Paket A') === p).length;
+                    let isActive = qs.some(q => q.package_name === p && q.is_active === true);
+                    return `<option value="${p}" ${p === currentVal ? 'selected' : ''}>${p} (${count} Soal) ${isActive ? '🌟 [Aktif]' : ''}</option>`;
+                }).join('');
+
+                let selectedPkg = filterSelect.value;
+                let btnDelPkg = document.getElementById('btnDeletePackage');
+                if(selectedPkg !== 'ALL') {
+                    btnDelPkg.classList.remove('hidden');
+                    btnDelPkg.textContent = `🗑️ Hapus "${selectedPkg}"`;
+                } else {
+                    btnDelPkg.classList.add('hidden');
+                }
+
+                let filteredQs = selectedPkg === 'ALL' ? qs : qs.filter(q => (q.package_name || 'Paket A') === selectedPkg);
+
+                document.getElementById('questionTableBody').innerHTML = filteredQs.length ? filteredQs.map(q => `
                     <tr class="border-b border-slate-100 hover:bg-slate-50 transition">
                         <td class="p-3.5 font-extrabold text-blue-700">${q.package_name || 'Paket A'}</td>
                         <td class="p-3.5 uppercase text-xs font-bold text-slate-600">${q.question_type}</td>
@@ -477,7 +506,28 @@
                             <button onclick="deleteQuestion(${q.id})" class="bg-red-50 text-red-600 px-2.5 py-1 rounded-lg text-xs font-bold">Hapus</button>
                         </td>
                     </tr>
-                `).join('') : `<tr><td colspan="5" class="p-6 text-center text-slate-400">Belum ada soal.</td></tr>`;
+                `).join('') : `<tr><td colspan="5" class="p-6 text-center text-slate-400">Tidak ada soal dalam paket ini.</td></tr>`;
+            }
+        }
+
+        async function deleteSelectedPackage() {
+            let selectedPkg = document.getElementById('filterPackageSelect').value;
+            if(selectedPkg === 'ALL') return;
+
+            const confirmRes = await Swal.fire({
+                title: `Hapus Paket "${selectedPkg}"?`,
+                text: `Semua soal di dalam paket ${selectedPkg} akan dihapus permanen!`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc2626',
+                confirmButtonText: 'Ya, Hapus Paket Ini!'
+            });
+
+            if(confirmRes.isConfirmed) {
+                await supabaseClient.from('questions').delete().eq('package_name', selectedPkg);
+                document.getElementById('filterPackageSelect').value = 'ALL';
+                Swal.fire('Terhapus!', `Paket ${selectedPkg} berhasil dihapus.`, 'success');
+                loadQuestions();
             }
         }
 
@@ -544,7 +594,7 @@
             let opt_d = document.getElementById('optD') ? document.getElementById('optD').value : '';
             let opt_e = document.getElementById('optE') ? document.getElementById('optE').value : '';
 
-            // Nonaktifkan semua paket lain agar paket baru menjadi satu-satunya yang aktif
+            // Otomatis menonaktifkan paket lain jika input manual baru ini diaktifkan
             await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', packageName);
 
             await supabaseClient.from('questions').insert([{
@@ -552,7 +602,7 @@
                 package_name: packageName, is_active: true, image_url: imgBase64, 
                 option: { a: opt_a, b: opt_b, c: opt_c, d: opt_d, e: opt_e }
             }]);
-            Swal.fire({ icon: 'success', title: 'Soal Disimpan', timer: 1200, showConfirmButton: false });
+            Swal.fire({ icon: 'success', title: 'Soal Manual Disimpan & Diaktifkan', timer: 1200, showConfirmButton: false });
             document.getElementById('addQuestionForm').reset();
             switchTab('questions');
         });
@@ -579,13 +629,13 @@
             if(!file) return;
             const fileName = file.name.toLowerCase();
 
-            let packageNameInput = prompt("Masukkan Nama Paket untuk soal ini:", "Paket A");
+            let packageNameInput = prompt("Masukkan Nama Paket untuk soal ini (Contoh: Paket A, Paket B, dll):", "Paket A");
             if (!packageNameInput) return;
 
             Swal.fire({ title: 'Membaca & Menganalisis Dokumen...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
             try {
-                // Nonaktifkan semua paket lama sebelum meng-upload paket baru
+                // Nonaktifkan semua paket lama saat upload paket baru
                 await supabaseClient.from('questions').update({ is_active: false }).not('package_name', 'is', null);
 
                 let totalImported = 0;
@@ -624,7 +674,7 @@
                                 question_type: finalType,
                                 correct_answer: String(ans),
                                 package_name: packageNameInput,
-                                is_active: true, // Paket yang baru di-upload otomatis aktif
+                                is_active: true,
                                 image_url: '',
                                 option: { a: String(optA), b: String(optB), c: String(optC), d: String(optD), e: String(optE) }
                             }]);
@@ -649,7 +699,7 @@
                             question_type: 'pilgan',
                             correct_answer: 'A',
                             package_name: packageNameInput,
-                            is_active: true, // Paket yang baru di-upload otomatis aktif
+                            is_active: true,
                             image_url: '',
                             option: { a: 'Pilihan A', b: 'Pilihan B', c: 'Pilihan C', d: 'Pilihan D', e: '' }
                         }]);
@@ -658,7 +708,7 @@
                 }
 
                 if (totalImported > 0) {
-                    Swal.fire('Berhasil!', `Sukses mengimpor ${totalImported} soal ke paket "${packageNameInput}" dan menjadikannya paket aktif!`, 'success');
+                    Swal.fire('Berhasil!', `Sukses mengimpor ${totalImported} soal ke "${packageNameInput}" dan menjadikannya paket aktif!`, 'success');
                     switchTab('questions');
                 } else {
                     throw new Error("File kosong atau format tidak terbaca.");
@@ -725,13 +775,10 @@
             }
         }, 4000);
 
-        // --- UPDATE: PREVIEW OTOMATIS MEMILIH PAKET YANG AKTIF ---
         async function initPreviewPackages() {
             const { data: qs } = await supabaseClient.from('questions').select('package_name, is_active');
             if(qs && qs.length > 0) {
                 let packages = [...new Set(qs.map(q => q.package_name || 'Paket A'))];
-                
-                // Cari paket yang sedang berstatus aktif (is_active = true)
                 let activePkgObj = qs.find(q => q.is_active === true);
                 let defaultPackage = activePkgObj ? (activePkgObj.package_name || 'Paket A') : packages[0];
 
@@ -763,7 +810,7 @@
 
         function renderPreview() {
             const container = document.getElementById('previewContainer');
-            if(!previewQuestionsList.length) { container.innerHTML = `<p class="text-center text-slate-400 py-10">Tidak ada soal.</p>`; return; }
+            if(!previewQuestionsList.length) { container.innerHTML = `<p class="text-center text-slate-400 py-10">Tidak ada soal dalam paket ini.</p>`; return; }
 
             if(previewMode === 'single') {
                 const q = previewQuestionsList[previewCurrentIndex];

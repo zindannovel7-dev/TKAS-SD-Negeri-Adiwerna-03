@@ -20,6 +20,23 @@
 </head>
 <body class="flex flex-col min-h-screen text-slate-800">
 
+    <!-- Proteksi Role Universal untuk Guru -->
+    <script>
+        (function() {
+            try {
+                const currentUser = JSON.parse(localStorage.getItem('tkad_current_user') || '{}');
+                if (!currentUser.role || currentUser.role !== 'teacher') {
+                    if (currentUser.role === 'admin') window.location.href = 'admin.html';
+                    else if (currentUser.role === 'student') window.location.href = 'student.html';
+                    else window.location.href = 'index.html';
+                    return;
+                }
+            } catch (e) {
+                window.location.href = 'index.html';
+            }
+        })();
+    </script>
+
     <header class="gradient-header text-white sticky top-0 z-30 px-6 py-4 shadow-md">
         <div class="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-4">
             <div class="flex items-center gap-3">
@@ -72,9 +89,17 @@
 
         <!-- SECTION 1: QUESTIONS -->
         <section id="sectionQuestions" class="pro-card rounded-2xl p-6 flex flex-col gap-5">
-            <div class="flex justify-between items-center">
-                <h2 class="text-base font-bold text-slate-900">Manajemen Paket Soal & Edit Soal</h2>
-                <button onclick="downloadQuestionTemplate()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold">📥 Download Template Excel Lengkap</button>
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div class="flex items-center gap-3">
+                    <h2 class="text-base font-bold text-slate-900">Manajemen Paket Soal & Edit Soal</h2>
+                    <select id="filterPackageSelect" onchange="loadQuestions()" class="px-3 py-1.5 border rounded-xl text-xs font-bold bg-slate-50 outline-none">
+                        <option value="ALL">Semua Paket</option>
+                    </select>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="deleteSelectedPackage()" id="btnDeletePackage" class="bg-amber-100 text-amber-800 px-4 py-2 rounded-xl text-xs font-bold hidden">🗑️ Hapus Paket Terpilih Ini</button>
+                    <button onclick="downloadQuestionTemplate()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold">📥 Download Template</button>
+                </div>
             </div>
             <div class="overflow-x-auto rounded-xl border border-slate-200">
                 <table class="w-full text-left border-collapse text-sm">
@@ -253,7 +278,6 @@
             else if(tab === 'analytics') { document.getElementById('sectionAnalytics').classList.remove('hidden'); document.getElementById('tabAnalyticsBtn').className += ' bg-emerald-600 text-white shadow-sm'; loadAnalytics(); }
         }
 
-        // POP-UP KONFIRMASI KELUAR SISTEM MENGGUNAKAN SWEETALERT2
         document.getElementById('btnLogout').addEventListener('click', () => {
             Swal.fire({
                 title: 'Keluar Sistem?',
@@ -272,7 +296,6 @@
             });
         });
 
-        // Ambil Token dan Durasi Ujian dari Database Supabase secara Sinkron
         async function fetchTokenAndDurationFromDB() {
             const { data: tokenData } = await supabaseClient.from('system_settings').select('*').eq('key', 'active_token').single();
             if(tokenData) document.getElementById('activeTokenDisplay').textContent = tokenData.value;
@@ -294,7 +317,6 @@
             Swal.fire({ icon: 'success', title: 'Token Baru!', html: `Token: <strong class="text-emerald-700">${token}</strong>`, timer: 2000, showConfirmButton: false });
         }
 
-        // Simpan Durasi Ujian Langsung ke Database Supabase (Tabel system_settings)
         async function saveExamDuration() {
             let durationVal = document.getElementById('examDurationInput').value.trim();
             if(!durationVal || isNaN(durationVal)) {
@@ -354,7 +376,28 @@
         async function loadQuestions() {
             const { data: qs } = await supabaseClient.from('questions').select('*');
             if(qs) {
-                document.getElementById('questionTableBody').innerHTML = qs.length ? qs.map(q => `
+                let packages = [...new Set(qs.map(q => q.package_name || 'Paket A'))];
+                let filterSelect = document.getElementById('filterPackageSelect');
+                let currentVal = filterSelect.value;
+                
+                filterSelect.innerHTML = `<option value="ALL">Semua Paket (${qs.length})</option>` + packages.map(p => {
+                    let count = qs.filter(q => (q.package_name || 'Paket A') === p).length;
+                    let isActive = qs.some(q => q.package_name === p && q.is_active === true);
+                    return `<option value="${p}" ${p === currentVal ? 'selected' : ''}>${p} (${count} Soal) ${isActive ? '🌟 [Aktif]' : ''}</option>`;
+                }).join('');
+
+                let selectedPkg = filterSelect.value;
+                let btnDelPkg = document.getElementById('btnDeletePackage');
+                if(selectedPkg !== 'ALL') {
+                    btnDelPkg.classList.remove('hidden');
+                    btnDelPkg.textContent = `🗑️ Hapus "${selectedPkg}"`;
+                } else {
+                    btnDelPkg.classList.add('hidden');
+                }
+
+                let filteredQs = selectedPkg === 'ALL' ? qs : qs.filter(q => (q.package_name || 'Paket A') === selectedPkg);
+
+                document.getElementById('questionTableBody').innerHTML = filteredQs.length ? filteredQs.map(q => `
                     <tr class="border-b border-slate-100 hover:bg-slate-50 transition">
                         <td class="p-3.5 font-extrabold text-emerald-700">${q.package_name || 'Paket A'}</td>
                         <td class="p-3.5 uppercase text-xs font-bold">${q.question_type}</td>
@@ -369,7 +412,28 @@
                             <button onclick="deleteQuestion(${q.id})" class="bg-red-50 text-red-600 px-2.5 py-1 rounded-lg text-xs font-bold">Hapus</button>
                         </td>
                     </tr>
-                `).join('') : `<tr><td colspan="5" class="p-6 text-center text-slate-400">Belum ada soal.</td></tr>`;
+                `).join('') : `<tr><td colspan="5" class="p-6 text-center text-slate-400">Tidak ada soal dalam paket ini.</td></tr>`;
+            }
+        }
+
+        async function deleteSelectedPackage() {
+            let selectedPkg = document.getElementById('filterPackageSelect').value;
+            if(selectedPkg === 'ALL') return;
+
+            const confirmRes = await Swal.fire({
+                title: `Hapus Paket "${selectedPkg}"?`,
+                text: `Semua soal di dalam paket ${selectedPkg} akan dihapus permanen!`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonColor: '#dc2626',
+                confirmButtonText: 'Ya, Hapus Paket Ini!'
+            });
+
+            if(confirmRes.isConfirmed) {
+                await supabaseClient.from('questions').delete().eq('package_name', selectedPkg);
+                document.getElementById('filterPackageSelect').value = 'ALL';
+                Swal.fire('Terhapus!', `Paket ${selectedPkg} berhasil dihapus.`, 'success');
+                loadQuestions();
             }
         }
 
@@ -436,12 +500,15 @@
             let opt_d = document.getElementById('optD') ? document.getElementById('optD').value : '';
             let opt_e = document.getElementById('optE') ? document.getElementById('optE').value : '';
 
+            // Otomatis menonaktifkan paket lain agar paket manual baru menjadi satu-satunya yang aktif
+            await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', packageName);
+
             await supabaseClient.from('questions').insert([{
                 question_text: question, correct_answer: answer, question_type: type,
                 package_name: packageName, is_active: true, image_url: imgBase64, 
                 option: { a: opt_a, b: opt_b, c: opt_c, d: opt_d, e: opt_e }
             }]);
-            Swal.fire({ icon: 'success', title: 'Soal Disimpan', timer: 1200, showConfirmButton: false });
+            Swal.fire({ icon: 'success', title: 'Soal Disimpan & Diaktifkan', timer: 1200, showConfirmButton: false });
             document.getElementById('addQuestionForm').reset();
             switchTab('questions');
         });
@@ -470,6 +537,9 @@
             Swal.fire({ title: 'AI Membaca Dokumen & Memproses Soal...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
             try {
+                // Nonaktifkan semua paket lama saat upload paket baru
+                await supabaseClient.from('questions').update({ is_active: false }).not('package_name', 'is', null);
+
                 let totalImported = 0;
                 if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
                     const data = await file.arrayBuffer();
@@ -510,7 +580,7 @@
                             totalImported++;
                         }
                     }
-                    Swal.fire('Berhasil!', `Sukses mengimpor ${totalImported} soal!`, 'success');
+                    Swal.fire('Berhasil!', `Sukses mengimpor ${totalImported} soal ke "${packageNameInput}" dan menjadikannya paket aktif!`, 'success');
                     switchTab('questions');
                 } else {
                     let extractedText = await file.text();
@@ -529,7 +599,7 @@
                         }]);
                         totalImported++;
                     }
-                    Swal.fire('Berhasil!', `Sukses mengimpor ${totalImported} soal teks!`, 'success');
+                    Swal.fire('Berhasil!', `Sukses mengimpor ${totalImported} soal teks ke "${packageNameInput}" dan menjadikannya paket aktif!`, 'success');
                     switchTab('questions');
                 }
             } catch (err) {
@@ -611,12 +681,22 @@
             });
         }
 
+        // --- PREVIEW OTOMATIS MEMILIH PAKET YANG AKTIF ---
         async function initPreviewPackages() {
-            const { data: qs } = await supabaseClient.from('questions').select('package_name');
-            if(qs) {
+            const { data: qs } = await supabaseClient.from('questions').select('package_name, is_active');
+            if(qs && qs.length > 0) {
                 let packages = [...new Set(qs.map(q => q.package_name || 'Paket A'))];
-                document.getElementById('previewPackageSelect').innerHTML = packages.map(p => `<option value="${p}">${p}</option>`).join('');
+                let activePkgObj = qs.find(q => q.is_active === true);
+                let defaultPackage = activePkgObj ? (activePkgObj.package_name || 'Paket A') : packages[0];
+
+                document.getElementById('previewPackageSelect').innerHTML = packages.map(p => 
+                    `<option value="${p}" ${p === defaultPackage ? 'selected' : ''}>${p} ${p === defaultPackage ? '(Aktif 🌟)' : ''}</option>`
+                ).join('');
+                
                 loadPreviewQuestions();
+            } else {
+                document.getElementById('previewPackageSelect').innerHTML = `<option value="">Tidak ada paket</option>`;
+                document.getElementById('previewContainer').innerHTML = `<p class="text-center text-slate-400 py-10">Tidak ada soal.</p>`;
             }
         }
 
@@ -637,7 +717,7 @@
 
         function renderPreview() {
             const container = document.getElementById('previewContainer');
-            if(!previewQuestionsList.length) { container.innerHTML = `<p class="text-center text-slate-400 py-10">Tidak ada soal.</p>`; return; }
+            if(!previewQuestionsList.length) { container.innerHTML = `<p class="text-center text-slate-400 py-10">Tidak ada soal dalam paket ini.</p>`; return; }
 
             if(previewMode === 'single') {
                 const q = previewQuestionsList[previewCurrentIndex];
@@ -733,6 +813,7 @@
         async function deleteQuestion(id) { await supabaseClient.from('questions').delete().eq('id', id); loadQuestions(); }
         async function deleteExamResult(id) { await supabaseClient.from('exam_results').delete().eq('id', id); loadAnalytics(); }
         async function deleteAllExamResults() { await supabaseClient.from('exam_results').delete().not('id', 'is', null); loadAnalytics(); }
+        
         async function togglePackageStatus(pkg, status) {
             if(status) await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', pkg);
             await supabaseClient.from('questions').update({ is_active: status }).eq('package_name', pkg);

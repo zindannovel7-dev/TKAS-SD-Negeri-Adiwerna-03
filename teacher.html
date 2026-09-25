@@ -4,19 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard Guru - Aplikasi TKAS SDN Adiwerna 3</title>
-    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Supabase SDK -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-    <!-- SweetAlert2 -->
     <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-    <!-- Pustaka Pembaca Berbagai Jenis File -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
     <style>
         * { font-family: 'Plus Jakarta Sans', sans-serif; }
         body { background: linear-gradient(135deg, #f0fdf4, #e0f2fe); min-height: 100vh; }
@@ -47,155 +41,193 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
             <div class="pro-card rounded-2xl p-6 bg-gradient-to-r from-emerald-50 to-blue-50 border-l-4 border-emerald-600 flex flex-col justify-between">
                 <div>
-                    <span class="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-md">Token Ujian Aktif (Sinkron)</span>
+                    <span class="text-xs font-bold uppercase tracking-wider text-emerald-700 bg-emerald-100 px-2.5 py-1 rounded-md">Token Ujian Aktif (Sinkron DB)</span>
                     <h2 id="activeTokenDisplay" class="text-3xl font-extrabold text-slate-900 tracking-wider mt-2">------</h2>
+                    <div class="text-xs font-semibold text-slate-600 bg-white px-3 py-1.5 rounded-full border inline-flex items-center gap-1.5 mt-3 shadow-xs">
+                        <span>⏱️ Berubah Dalam:</span> <span id="tokenCountdownTimer" class="text-emerald-700 font-extrabold text-sm">05:00</span>
+                    </div>
                 </div>
-                <div class="flex items-center gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200 shadow-sm mt-4 w-fit">
-                    <span class="text-xs font-semibold text-slate-600">⏱️ Refresh dalam:</span>
-                    <span id="countdownTimer" class="text-emerald-600 font-bold text-sm">05:00</span>
-                </div>
+                <button onclick="forceGenerateDBToken()" class="mt-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm w-fit px-4 transition">🔄 Buat / Ganti Token</button>
             </div>
 
             <div class="pro-card rounded-2xl p-6 flex flex-col justify-between">
                 <div>
                     <h3 class="text-sm font-bold text-slate-900 mb-1">Pengaturan Durasi Ujian</h3>
-                    <p class="text-xs text-slate-500 mb-3">Atur waktu pengerjaan tryout untuk siswa (dalam satuan menit).</p>
+                    <p class="text-xs text-slate-500 mb-3">Atur waktu pengerjaan tryout untuk siswa (dalam menit).</p>
                 </div>
                 <div class="flex gap-2">
-                    <input type="number" id="examDurationInput" min="1" max="300" placeholder="Contoh: 70" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm font-bold text-emerald-700 outline-none">
+                    <input type="number" id="examDurationInput" min="1" max="300" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm font-bold text-emerald-700 outline-none">
                     <button onclick="saveExamDuration()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold whitespace-nowrap shadow-sm">Simpan</button>
                 </div>
             </div>
         </div>
 
-        <!-- Tab Navigasi -->
         <div class="flex flex-wrap gap-2 border-b border-slate-300 pb-2">
-            <button onclick="switchTab('questions')" id="tabQuestionsBtn" class="px-4 py-2 rounded-xl font-bold text-sm bg-emerald-600 text-white shadow-sm transition">Bank Soal & Paket</button>
-            <button onclick="switchTab('upload')" id="tabUploadBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">📁 Upload File (AI Groq)</button>
+            <button onclick="switchTab('questions')" id="tabQuestionsBtn" class="px-4 py-2 rounded-xl font-bold text-sm bg-emerald-600 text-white shadow-sm transition">Bank Soal & Edit</button>
+            <button onclick="switchTab('upload')" id="tabUploadBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">📁 Upload File Fleksibel</button>
             <button onclick="switchTab('add')" id="tabAddBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">+ Soal Manual</button>
-            <button onclick="switchTab('analytics')" id="tabAnalyticsBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">📊 Analisis & Evaluasi AI</button>
+            <button onclick="switchTab('preview')" id="tabPreviewBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">👁️ Preview Soal</button>
+            <button onclick="switchTab('analytics')" id="tabAnalyticsBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">📊 Live Monitor & Analisis AI</button>
         </div>
 
-        <!-- SECTION 1: QUESTIONS & PACKAGES -->
+        <!-- SECTION 1: QUESTIONS -->
         <section id="sectionQuestions" class="pro-card rounded-2xl p-6 flex flex-col gap-5">
-            <div>
-                <h2 class="text-base font-bold text-slate-900">Manajemen Paket Soal Ujian</h2>
-                <p class="text-xs text-slate-500">Pilih paket soal yang aktif untuk dibagikan kepada siswa</p>
+            <div class="flex justify-between items-center">
+                <h2 class="text-base font-bold text-slate-900">Manajemen Paket Soal & Edit Soal</h2>
+                <button onclick="downloadQuestionTemplate()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold">📥 Download Template Excel Lengkap</button>
             </div>
             <div class="overflow-x-auto rounded-xl border border-slate-200">
                 <table class="w-full text-left border-collapse text-sm">
                     <thead>
-                        <tr class="bg-slate-100/70 text-slate-700 border-b border-slate-200 text-xs uppercase tracking-wider">
-                            <th class="p-3.5 font-bold">Paket Soal</th>
-                            <th class="p-3.5 font-bold">Tipe Soal</th>
-                            <th class="p-3.5 font-bold">Pertanyaan</th>
-                            <th class="p-3.5 font-bold">Status Siswa</th>
-                            <th class="p-3.5 font-bold text-center">Aksi</th>
+                        <tr class="bg-slate-100/70 text-slate-700 border-b text-xs uppercase tracking-wider">
+                            <th class="p-3.5 font-bold">Paket</th><th class="p-3.5 font-bold">Tipe</th><th class="p-3.5 font-bold">Pertanyaan & Gambar</th><th class="p-3.5 font-bold">Status</th><th class="p-3.5 font-bold text-center">Aksi</th>
                         </tr>
                     </thead>
-                    <tbody id="questionTableBody">
-                        <tr><td colspan="5" class="p-6 text-center text-slate-400 text-sm">Memuat soal...</td></tr>
-                    </tbody>
+                    <tbody id="questionTableBody"><tr><td colspan="5" class="p-6 text-center text-slate-400">Memuat soal...</td></tr></tbody>
                 </table>
             </div>
         </section>
 
-        <!-- SECTION 2: UPLOAD FILE GROQ AI -->
+        <!-- SECTION 2: UPLOAD FILE -->
         <section id="sectionUpload" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-5 max-w-2xl">
-            <div>
-                <h2 class="text-base font-bold text-slate-900">Upload Dokumen Soal (Otomatis Jadi Paket Baru)</h2>
-                <p class="text-xs text-slate-500">Unggah file soal. Groq AI super cepat akan mengekstrak dan menjadikannya paket aktif untuk siswa.</p>
-            </div>
+            <div><h2 class="text-base font-bold text-slate-900">Upload Dokumen Soal (AI + Semua Tipe Soal)</h2></div>
             <div class="border-2 border-dashed border-emerald-300 bg-emerald-50/50 rounded-2xl p-8 text-center flex flex-col items-center justify-center gap-3">
                 <span class="text-4xl">⚡🤖</span>
+                <p class="text-xs text-slate-600">Mendukung tipe soal: <em>pilgan, complex, truefalse (benar/salah), isian, dan essay</em>.</p>
                 <input type="file" id="anyFile" accept=".xlsx, .xls, .csv, .docx, .pdf, .txt" class="hidden" onchange="handleUniversalUpload(event)">
-                <button onclick="document.getElementById('anyFile').click()" class="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md">Pilih Berkas Dokumen Soal</button>
+                <button onclick="document.getElementById('anyFile').click()" class="bg-emerald-600 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-md">Pilih Berkas Dokumen Soal</button>
             </div>
         </section>
 
         <!-- SECTION 3: ADD MANUAL -->
         <section id="sectionAdd" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-4 max-w-2xl">
-            <div>
-                <h2 class="text-base font-bold text-slate-900">Form Pembuatan Soal Manual per Paket</h2>
-            </div>
+            <div><h2 class="text-base font-bold text-slate-900">Form Pembuatan Soal Manual Lengkap</h2></div>
             <form id="addQuestionForm" class="space-y-4">
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Nama Paket Soal</label>
-                    <input type="text" id="manualPackage" placeholder="Contoh: Paket A" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none font-bold text-emerald-700">
-                </div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Nama Paket Soal</label><input type="text" id="manualPackage" placeholder="Contoh: Paket A" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm font-bold text-emerald-700"></div>
                 <div>
                     <label class="block text-xs font-semibold text-slate-600 mb-1">Tipe Soal</label>
-                    <select id="qType" onchange="toggleQuestionType()" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none">
-                        <option value="pilgan">Pilihan Ganda (1 Jawaban)</option>
-                        <option value="complex">Pilihan Ganda Kompleks (> 1 Jawaban)</option>
-                        <option value="truefalse">Benar / Salah</option>
+                    <select id="qType" onchange="toggleQuestionType()" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm">
+                        <option value="pilgan">Pilihan Ganda</option>
+                        <option value="complex">Pilihan Ganda Kompleks</option>
+                        <option value="truefalse">Benar / Salah (Banyak Pernyataan)</option>
+                        <option value="isian">Isian Singkat</option>
+                        <option value="essay">Essay / Uraian</option>
                     </select>
                 </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Pertanyaan</label>
-                    <textarea id="qText" rows="3" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></textarea>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Pertanyaan / Perintah Utama</label><textarea id="qText" rows="3" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></textarea></div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Upload Gambar Soal (Opsional)</label><input type="file" id="qImageFile" accept="image/*" class="w-full text-xs text-slate-500"></div>
+                
+                <div id="optionsGroup" class="space-y-2">
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 1</label><input type="text" id="optA" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 2</label><input type="text" id="optB" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 3</label><input type="text" id="optC" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 4</label><input type="text" id="optD" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 5</label><input type="text" id="optE" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
                 </div>
-                <div id="optionsGroup" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi A</label><input type="text" id="optA" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
-                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi B</label><input type="text" id="optB" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
-                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi C</label><input type="text" id="optC" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
-                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi D</label><input type="text" id="optD" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
-                </div>
-                <div>
-                    <label class="block text-xs font-semibold text-slate-600 mb-1">Kunci Jawaban</label>
-                    <input type="text" id="qAnswer" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none">
-                </div>
-                <div class="flex justify-end pt-2">
-                    <button type="submit" class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md">Simpan Soal ke Paket</button>
-                </div>
+
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Kunci Jawaban</label><input type="text" id="qAnswer" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm" placeholder="Contoh: A atau A, B atau 1:B, 2:S"></div>
+                <div class="flex justify-end pt-2"><button type="submit" class="px-5 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-md">Simpan Soal</button></div>
             </form>
         </section>
 
-        <!-- SECTION 4: ANALYTICS & AI INSIGHTS -->
-        <section id="sectionAnalytics" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-5">
-            <div>
-                <h2 class="text-base font-bold text-slate-900">Analisis Rekap Nilai & Evaluasi Siswa</h2>
-                <p class="text-xs text-slate-500">Pantau progres siswa dan rekomendasi materi perbaikan dari Groq AI</p>
+        <!-- SECTION 4: PREVIEW SOAL -->
+        <section id="sectionPreview" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-5">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div><h2 class="text-base font-bold text-slate-900">Pratinjau (Preview) Soal Interaktif</h2></div>
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-bold text-slate-600">Pilih Paket:</label>
+                    <select id="previewPackageSelect" onchange="loadPreviewQuestions()" class="px-3 py-2 border rounded-xl text-xs font-bold bg-slate-50 outline-none"></select>
+                </div>
+            </div>
+            <div class="flex gap-2 border-b pb-2">
+                <button onclick="switchPreviewMode('single')" id="previewModeSingle" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white shadow-xs">Pratinjau Per Soal</button>
+                <button onclick="switchPreviewMode('all')" id="previewModeAll" class="px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700">Pratinjau Keseluruhan</button>
+            </div>
+            <div id="previewContainer" class="bg-slate-50 p-6 rounded-2xl border border-slate-200 min-h-[300px]"></div>
+        </section>
+
+        <!-- SECTION 5: ANALYTICS & LIVE MONITOR -->
+        <section id="sectionAnalytics" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-6">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">Live Monitor & Analisis Hasil Siswa (Real-Time)</h2>
+                    <p class="text-xs text-slate-500">Memantau status siswa secara langsung: Sedang Mengerjakan & Selesai Ujian.</p>
+                </div>
+                <div class="flex gap-2">
+                    <button onclick="downloadExamResultsExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">📥 Download Rekap Nilai (Excel)</button>
+                    <button onclick="deleteAllExamResults()" class="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold">🗑️ Hapus Rekap</button>
+                </div>
             </div>
 
-            <!-- Kotak Wawasan AI -->
-            <div id="aiInsightsBox"></div>
+            <!-- LIVE CARDS SINKRON DENGAN live_sessions -->
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col">
+                    <span class="text-xs font-bold text-amber-700 uppercase">1. Sedang Login</span>
+                    <h3 id="monitorLoginCount" class="text-2xl font-extrabold text-amber-900 mt-1">0 Siswa</h3>
+                    <div id="monitorLoginList" class="mt-2 text-xs text-slate-600 space-y-1 max-h-24 overflow-y-auto"></div>
+                </div>
+                <div class="bg-blue-50 border border-blue-200 rounded-xl p-4 flex flex-col">
+                    <span class="text-xs font-bold text-blue-700 uppercase">2. Sedang Mengerjakan Ujian</span>
+                    <h3 id="monitorExamCount" class="text-2xl font-extrabold text-blue-900 mt-1">0 Siswa</h3>
+                    <div id="monitorExamList" class="mt-2 text-xs text-slate-600 space-y-1 max-h-24 overflow-y-auto"></div>
+                </div>
+                <div class="bg-emerald-50 border border-emerald-200 rounded-xl p-4 flex flex-col">
+                    <span class="text-xs font-bold text-emerald-700 uppercase">3. Selesai Ujian</span>
+                    <h3 id="monitorFinishedCount" class="text-2xl font-extrabold text-emerald-900 mt-1">0 Siswa</h3>
+                    <div id="monitorFinishedList" class="mt-2 text-xs text-slate-600 space-y-1 max-h-24 overflow-y-auto"></div>
+                </div>
+            </div>
 
-            <div class="overflow-x-auto rounded-xl border border-slate-200">
+            <div class="overflow-x-auto rounded-xl border border-slate-200 mt-2">
                 <table class="w-full text-left border-collapse text-sm">
                     <thead>
-                        <tr class="bg-slate-100/70 text-slate-700 border-b border-slate-200 text-xs uppercase tracking-wider">
-                            <th class="p-3.5 font-bold">Nama Siswa (ID)</th>
-                            <th class="p-3.5 font-bold">Skor Akhir</th>
-                            <th class="p-3.5 font-bold">Status Pengerjaan</th>
-                            <th class="p-3.5 font-bold">Waktu Selesai</th>
+                        <tr class="bg-slate-100/70 text-slate-700 border-b text-xs uppercase tracking-wider">
+                            <th class="p-3.5 font-bold">Nama Siswa</th><th class="p-3.5 font-bold">Skor</th><th class="p-3.5 font-bold">Status</th><th class="p-3.5 font-bold">Analisis Kekurangan & Penanganan</th><th class="p-3.5 font-bold text-center">Aksi</th>
                         </tr>
                     </thead>
-                    <tbody id="analyticsTableBody">
-                        <tr><td colspan="4" class="p-6 text-center text-slate-400 text-sm">Memuat data rekap nilai...</td></tr>
-                    </tbody>
+                    <tbody id="analyticsTableBody"><tr><td colspan="5" class="p-6 text-center text-slate-400">Memuat data...</td></tr></tbody>
                 </table>
             </div>
         </section>
 
     </main>
 
-    <!-- Footer Copyright -->
-    <footer class="mt-auto py-6 text-center text-xs text-slate-500 border-t border-slate-200 bg-white/50 backdrop-blur-sm">
-        <p class="font-semibold text-slate-700">NZ Production &bull; SDN Adiwerna 3</p>
-        <p class="mt-1">&copy; 2026 Hak Cipta Dilindungi Undang-Undang.</p>
-    </footer>
+    <!-- MODAL EDIT SOAL -->
+    <div id="editQuestionModal" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs hidden items-center justify-center p-4 z-50">
+        <div class="pro-card rounded-2xl p-6 max-w-xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+            <h3 class="text-base font-bold text-slate-900 mb-4">Edit Soal Ujian & Upload Gambar</h3>
+            <form id="editQuestionForm" class="space-y-3">
+                <input type="hidden" id="editQId">
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Paket</label><input type="text" id="editPackage" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm font-bold"></div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Tipe</label><select id="editType" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"><option value="pilgan">Pilihan Ganda</option><option value="complex">Kompleks</option><option value="truefalse">Benar / Salah</option><option value="isian">Isian</option><option value="essay">Essay</option></select></div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Pertanyaan</label><textarea id="editQuestionText" rows="3" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></textarea></div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Ganti Gambar (Opsional)</label><input type="file" id="editImageFile" accept="image/*" class="w-full text-xs text-slate-500"></div>
+                <div class="space-y-2">
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 1</label><input type="text" id="editOptA" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 2</label><input type="text" id="editOptB" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 3</label><input type="text" id="editOptC" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 4</label><input type="text" id="editOptD" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 5</label><input type="text" id="editOptE" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                </div>
+                <div><label class="block text-xs font-semibold text-slate-600 mb-1">Kunci Jawaban</label><input type="text" id="editAnswer" required class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                <div class="flex justify-end gap-2 pt-3">
+                    <button type="button" onclick="closeEditModal()" class="px-4 py-2 bg-slate-100 rounded-xl text-xs font-semibold">Batal</button>
+                    <button type="submit" class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-semibold shadow-md">Simpan Perubahan</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script>
-        // 🔒 SISTEM PENGAMAN HALAMAN (SESSION GUARD UNTUK GURU)
-        // Mencegah siswa iseng mengakses langsung halaman guru tanpa login resmi
+        // Proteksi Role Universal untuk Guru
         (function() {
             try {
-                const loggedInUser = JSON.parse(localStorage.getItem('tkad_current_user'));
-                // Mengizinkan guru ataupun admin untuk mengakses panel guru
-                if (!loggedInUser || (loggedInUser.role !== 'teacher' && loggedInUser.role !== 'admin')) {
-                    alert('Akses Ditolak! Anda tidak memiliki izin untuk membuka halaman Pengajar.');
-                    window.location.href = 'index.html';
+                const currentUser = JSON.parse(localStorage.getItem('tkad_current_user') || '{}');
+                if (!currentUser.role || currentUser.role !== 'teacher') {
+                    if (currentUser.role === 'admin') window.location.href = 'admin.html';
+                    else if (currentUser.role === 'student') window.location.href = 'exam.html';
+                    else window.location.href = 'index.html';
+                    return;
                 }
             } catch (e) {
                 window.location.href = 'index.html';
@@ -205,79 +237,197 @@
         const SUPABASE_URL = 'https://xmqrddlcdfrylgzwviuo.supabase.co';
         const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InhtcXJkZGxjZGZyeWxnend2aXVvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTAxNzQyODYsImV4cCI6MjEwNTc1MDI4Nn0.6LJOxROS8uvb2XnnAd924VkvnXv5jpFJTI7mKS8YJ3o'; 
         const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-        const GROQ_API_KEY = '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';
+
+        let previewQuestionsList = [];
+        let previewCurrentIndex = 0;
+        let previewMode = 'single';
 
         function switchTab(tab) {
-            ['sectionQuestions', 'sectionUpload', 'sectionAdd', 'sectionAnalytics'].forEach(id => document.getElementById(id).classList.add('hidden'));
-            ['tabQuestionsBtn', 'tabUploadBtn', 'tabAddBtn', 'tabAnalyticsBtn'].forEach(id => document.getElementById(id).className = 'px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition');
+            ['sectionQuestions', 'sectionUpload', 'sectionAdd', 'sectionPreview', 'sectionAnalytics'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            ['tabQuestionsBtn', 'tabUploadBtn', 'tabAddBtn', 'tabPreviewBtn', 'tabAnalyticsBtn'].forEach(id => document.getElementById(id).className = 'px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition');
 
-            if(tab === 'questions') { document.getElementById('sectionQuestions').classList.remove('hidden'); document.getElementById('tabQuestionsBtn').className = 'px-4 py-2 rounded-xl font-bold text-sm bg-emerald-600 text-white shadow-sm transition'; loadQuestions(); }
-            else if(tab === 'upload') { document.getElementById('sectionUpload').classList.remove('hidden'); document.getElementById('tabUploadBtn').className = 'px-4 py-2 rounded-xl font-bold text-sm bg-emerald-600 text-white shadow-sm transition'; }
-            else if(tab === 'add') { document.getElementById('sectionAdd').classList.remove('hidden'); document.getElementById('tabAddBtn').className = 'px-4 py-2 rounded-xl font-bold text-sm bg-emerald-600 text-white shadow-sm transition'; }
-            else if(tab === 'analytics') { document.getElementById('sectionAnalytics').classList.remove('hidden'); document.getElementById('tabAnalyticsBtn').className = 'px-4 py-2 rounded-xl font-bold text-sm bg-emerald-600 text-white shadow-sm transition'; loadAnalytics(); }
+            if(tab === 'questions') { document.getElementById('sectionQuestions').classList.remove('hidden'); document.getElementById('tabQuestionsBtn').className += ' bg-emerald-600 text-white shadow-sm'; loadQuestions(); }
+            else if(tab === 'upload') { document.getElementById('sectionUpload').classList.remove('hidden'); document.getElementById('tabUploadBtn').className += ' bg-emerald-600 text-white shadow-sm'; }
+            else if(tab === 'add') { document.getElementById('sectionAdd').classList.remove('hidden'); document.getElementById('tabAddBtn').className += ' bg-emerald-600 text-white shadow-sm'; }
+            else if(tab === 'preview') { document.getElementById('sectionPreview').classList.remove('hidden'); document.getElementById('tabPreviewBtn').className += ' bg-emerald-600 text-white shadow-sm'; initPreviewPackages(); }
+            else if(tab === 'analytics') { document.getElementById('sectionAnalytics').classList.remove('hidden'); document.getElementById('tabAnalyticsBtn').className += ' bg-emerald-600 text-white shadow-sm'; loadAnalytics(); }
         }
 
+        // POP-UP KONFIRMASI KELUAR SISTEM MENGGUNAKAN SWEETALERT2
         document.getElementById('btnLogout').addEventListener('click', () => {
-            Swal.fire({ title: 'Keluar sistem?', icon: 'question', showCancelButton: true, confirmButtonColor: '#059669', confirmButtonText: 'Ya' }).then(r => { if(r.isConfirmed) { localStorage.removeItem('tkad_current_user'); window.location.href = 'index.html'; } });
+            Swal.fire({
+                title: 'Keluar Sistem?',
+                text: "Anda akan keluar dari sesi Panel Guru.",
+                icon: 'question',
+                showCancelButton: true,
+                confirmButtonColor: '#059669',
+                cancelButtonColor: '#dc2626',
+                confirmButtonText: 'Ya, Keluar',
+                cancelButtonText: 'Batal'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    localStorage.removeItem('tkad_current_user'); 
+                    window.location.href = 'index.html';
+                }
+            });
         });
+
+        async function fetchTokenFromDB() {
+            const { data } = await supabaseClient.from('system_settings').select('*').eq('key', 'active_token').single();
+            if(data) document.getElementById('activeTokenDisplay').textContent = data.value;
+        }
+
+        async function forceGenerateDBToken() {
+            let chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789', token = '';
+            for (let i = 0; i < 6; i++) token += chars.charAt(Math.floor(Math.random() * chars.length));
+            await supabaseClient.from('system_settings').upsert([{ key: 'active_token', value: token, updated_at: new Date() }], { onConflict: 'key' });
+            localStorage.setItem('tkad_token_timestamp', new Date().getTime());
+            fetchTokenFromDB();
+            Swal.fire({ icon: 'success', title: 'Token Baru!', html: `Token: <strong class="text-emerald-700">${token}</strong>`, timer: 2000, showConfirmButton: false });
+        }
+
+        setInterval(() => {
+            let savedTime = localStorage.getItem('tkad_token_timestamp');
+            if(!savedTime) { savedTime = new Date().getTime(); localStorage.setItem('tkad_token_timestamp', savedTime); }
+            let elapsed = Math.floor((new Date().getTime() - Number(savedTime)) / 1000);
+            let remaining = 300 - (elapsed % 300);
+            if(remaining <= 5 && remaining >= 4 && elapsed > 10) forceGenerateDBToken();
+            let m = Math.floor(remaining / 60), s = remaining % 60;
+            const timerEl = document.getElementById('tokenCountdownTimer');
+            if(timerEl) timerEl.textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+        }, 1000);
 
         function toggleQuestionType() {
             const type = document.getElementById('qType').value;
             const optionsGroup = document.getElementById('optionsGroup');
-            if(type === 'truefalse') {
-                optionsGroup.innerHTML = `<div class="col-span-2 bg-slate-50 p-3 rounded-xl border text-xs text-slate-500 font-semibold">Otomatis opsi: A. Benar | B. Salah</div>`;
+            if(type === 'isian' || type === 'essay') {
+                optionsGroup.innerHTML = `<div class="bg-slate-50 p-3 rounded-xl border text-xs text-slate-500 font-semibold">Format isian/uraian bebas.</div>`;
             } else {
                 optionsGroup.innerHTML = `
-                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi A</label><input type="text" id="optA" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
-                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi B</label><input type="text" id="optB" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
-                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi C</label><input type="text" id="optC" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
-                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi D</label><input type="text" id="optD" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm outline-none"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 1</label><input type="text" id="optA" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 2</label><input type="text" id="optB" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 3</label><input type="text" id="optC" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 4</label><input type="text" id="optD" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
+                    <div><label class="block text-xs font-semibold text-slate-600 mb-1">Opsi / Pernyataan 5</label><input type="text" id="optE" class="w-full px-3 py-2 border rounded-xl bg-slate-50 text-sm"></div>
                 `;
             }
+        }
+
+        function fileToBase64(file) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.readAsDataURL(file);
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = error => reject(error);
+            });
         }
 
         async function loadQuestions() {
             const { data: qs } = await supabaseClient.from('questions').select('*');
             if(qs) {
-                document.getElementById('questionTableBody').innerHTML = qs.length ? qs.map(q => {
-                    let rawType = (q.question_type || 'pilgan').toLowerCase();
-                    let badgeText = 'Pilihan Ganda';
-                    let badgeColor = 'bg-blue-50 text-blue-600';
-
-                    if(rawType === 'complex') { badgeText = 'Ganda Kompleks'; badgeColor = 'bg-purple-50 text-purple-600'; }
-                    else if(rawType === 'truefalse') { badgeText = 'Benar / Salah'; badgeColor = 'bg-amber-50 text-amber-600'; }
-
-                    let isActive = q.is_active === true;
-                    let statusBadge = isActive ? `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">Aktif (Live)</span>` : `<span class="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-500">Non-Aktif</span>`;
-                    let toggleBtnText = isActive ? 'Nonaktifkan' : 'Aktifkan';
-                    let toggleBtnClass = isActive ? 'bg-amber-50 hover:bg-amber-100 text-amber-700' : 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700';
-
-                    return `
-                        <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition">
-                            <td class="p-3.5 font-extrabold text-emerald-700">${q.package_name || 'Paket A'}</td>
-                            <td class="p-3.5"><span class="px-2 py-0.5 rounded text-[11px] font-bold ${badgeColor}">${badgeText}</span></td>
-                            <td class="p-3.5 font-medium text-slate-900 max-w-xs truncate">${q.question_text || ''}</td>
-                            <td class="p-3.5">${statusBadge}</td>
-                            <td class="p-3.5 text-center flex justify-center gap-1.5">
-                                <button onclick="togglePackageStatus('${q.package_name || 'Paket A'}', ${!isActive})" class="${toggleBtnClass} px-2.5 py-1 rounded-lg text-xs font-bold">${toggleBtnText}</button>
-                                <button onclick="deleteQuestion(${q.id})" class="bg-red-50 hover:bg-red-100 text-red-600 px-2.5 py-1 rounded-lg text-xs font-bold">Hapus</button>
-                            </td>
-                        </tr>
-                    `;
-                }).join('') : `<tr><td colspan="5" class="p-6 text-center text-slate-400 text-sm">Belum ada soal tersedia.</td></tr>`;
+                document.getElementById('questionTableBody').innerHTML = qs.length ? qs.map(q => `
+                    <tr class="border-b border-slate-100 hover:bg-slate-50 transition">
+                        <td class="p-3.5 font-extrabold text-emerald-700">${q.package_name || 'Paket A'}</td>
+                        <td class="p-3.5 uppercase text-xs font-bold">${q.question_type}</td>
+                        <td class="p-3.5 font-medium max-w-xs">
+                            <div class="truncate">${q.question_text}</div>
+                            ${q.image_url ? `<span class="text-[10px] bg-purple-100 text-purple-700 px-2 py-0.5 rounded font-bold mt-1 inline-block">📷 Ada Gambar</span>` : ''}
+                        </td>
+                        <td class="p-3.5">${q.is_active ? 'Aktif' : 'Non-Aktif'}</td>
+                        <td class="p-3.5 text-center flex justify-center gap-1.5">
+                            <button onclick="openEditModal(${q.id})" class="bg-blue-50 text-blue-600 px-2.5 py-1 rounded-lg text-xs font-bold">Edit</button>
+                            <button onclick="togglePackageStatus('${q.package_name}', ${!q.is_active})" class="px-2.5 py-1 rounded-lg text-xs font-bold ${q.is_active ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}">${q.is_active ? 'Matikan' : 'Aktifkan'}</button>
+                            <button onclick="deleteQuestion(${q.id})" class="bg-red-50 text-red-600 px-2.5 py-1 rounded-lg text-xs font-bold">Hapus</button>
+                        </td>
+                    </tr>
+                `).join('') : `<tr><td colspan="5" class="p-6 text-center text-slate-400">Belum ada soal.</td></tr>`;
             }
         }
 
-        async function togglePackageStatus(packageName, targetStatus) {
-            if (targetStatus) {
-                await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', packageName);
-            }
-            const { error } = await supabaseClient.from('questions').update({ is_active: targetStatus }).eq('package_name', packageName);
-            if(error) Swal.fire('Gagal', error.message, 'error');
-            else {
-                Swal.fire({ icon: 'success', title: `Paket ${packageName} ${targetStatus ? 'Diaktifkan' : 'Dinonaktifkan'}`, timer: 1200, showConfirmButton: false });
-                loadQuestions();
-            }
+        async function openEditModal(id) {
+            const { data: q } = await supabaseClient.from('questions').select('*').eq('id', id).single();
+            if(!q) return;
+            document.getElementById('editQId').value = q.id;
+            document.getElementById('editPackage').value = q.package_name || 'Paket A';
+            document.getElementById('editType').value = q.question_type || 'pilgan';
+            document.getElementById('editQuestionText').value = q.question_text || '';
+            document.getElementById('editAnswer').value = q.correct_answer || '';
+            let opt = q.option || {};
+            document.getElementById('editOptA').value = opt.a || '';
+            document.getElementById('editOptB').value = opt.b || '';
+            document.getElementById('editOptC').value = opt.c || '';
+            document.getElementById('editOptD').value = opt.d || '';
+            document.getElementById('editOptE').value = opt.e || '';
+            document.getElementById('editQuestionModal').style.display = 'flex';
+        }
+        function closeEditModal() { document.getElementById('editQuestionModal').style.display = 'none'; }
+
+        document.getElementById('editQuestionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('editQId').value;
+            let imgBase64 = null;
+            const fileInput = document.getElementById('editImageFile');
+            if(fileInput.files && fileInput.files[0]) imgBase64 = await fileToBase64(fileInput.files[0]);
+            
+            let updatePayload = {
+                package_name: document.getElementById('editPackage').value,
+                question_type: document.getElementById('editType').value,
+                question_text: document.getElementById('editQuestionText').value,
+                correct_answer: document.getElementById('editAnswer').value,
+                option: { 
+                    a: document.getElementById('editOptA').value, 
+                    b: document.getElementById('editOptB').value, 
+                    c: document.getElementById('editOptC').value, 
+                    d: document.getElementById('editOptD').value,
+                    e: document.getElementById('editOptE').value 
+                }
+            };
+            if(imgBase64) updatePayload.image_url = imgBase64;
+
+            await supabaseClient.from('questions').update(updatePayload).eq('id', id);
+            closeEditModal();
+            Swal.fire({ icon: 'success', title: 'Soal Diperbarui!', timer: 1200, showConfirmButton: false });
+            loadQuestions();
+        });
+
+        document.getElementById('addQuestionForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            let imgBase64 = '';
+            const fileInput = document.getElementById('qImageFile');
+            if(fileInput.files && fileInput.files[0]) imgBase64 = await fileToBase64(fileInput.files[0]);
+
+            const packageName = document.getElementById('manualPackage').value.trim() || 'Paket A';
+            const type = document.getElementById('qType').value;
+            const question = document.getElementById('qText').value;
+            const answer = document.getElementById('qAnswer').value;
+            
+            let opt_a = document.getElementById('optA') ? document.getElementById('optA').value : '';
+            let opt_b = document.getElementById('optB') ? document.getElementById('optB').value : '';
+            let opt_c = document.getElementById('optC') ? document.getElementById('optC').value : '';
+            let opt_d = document.getElementById('optD') ? document.getElementById('optD').value : '';
+            let opt_e = document.getElementById('optE') ? document.getElementById('optE').value : '';
+
+            await supabaseClient.from('questions').insert([{
+                question_text: question, correct_answer: answer, question_type: type,
+                package_name: packageName, is_active: true, image_url: imgBase64, 
+                option: { a: opt_a, b: opt_b, c: opt_c, d: opt_d, e: opt_e }
+            }]);
+            Swal.fire({ icon: 'success', title: 'Soal Disimpan', timer: 1200, showConfirmButton: false });
+            document.getElementById('addQuestionForm').reset();
+            switchTab('questions');
+        });
+
+        function downloadQuestionTemplate() {
+            const templateData = [
+                { "Pertanyaan": "Budi membantu ibu memasak...", "Tipe": "pilgan", "Opsi A": "Hidung", "Opsi B": "Kulit", "Opsi C": "Mata", "Opsi D": "Telinga", "Opsi E": "", "Kunci": "B" },
+                { "Pertanyaan": "Pilih dua alat indra...", "Tipe": "complex", "Opsi A": "Hidung", "Opsi B": "Kulit", "Opsi C": "Mata", "Opsi D": "Telinga", "Opsi E": "", "Kunci": "A, B" },
+                { "Pertanyaan": "Tentukan kebenaran pernyataan berikut:", "Tipe": "truefalse", "Opsi A": "Mata adalah indra penglihat", "Opsi B": "Telinga untuk mengecap", "Opsi C": "Kulit adalah peraba", "Opsi D": "Hidung untuk membau", "Opsi E": "", "Kunci": "1:B, 2:S, 3:B, 4:B" },
+                { "Pertanyaan": "Alat indra untuk mengecap rasa adalah ...", "Tipe": "isian", "Opsi A": "", "Opsi B": "", "Opsi C": "", "Opsi D": "", "Opsi E": "", "Kunci": "Lidah" }
+            ];
+            const ws = XLSX.utils.json_to_sheet(templateData);
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "Template");
+            XLSX.writeFile(wb, "Template_Bank_Soal_TKAS.xlsx");
         }
 
         async function handleUniversalUpload(event) {
@@ -285,255 +435,287 @@
             if(!file) return;
             const fileName = file.name.toLowerCase();
 
-            let packageNameInput = prompt("Masukkan Nama Paket untuk file ini (Contoh: Paket B):", "Paket B");
+            let packageNameInput = prompt("Masukkan Nama Paket untuk file ini:", "Paket A");
             if (!packageNameInput) return;
 
-            Swal.fire({ title: 'Groq AI Membaca Dokumen...', html: 'Mengekstrak dan merapikan soal dengan kecepatan kilat...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
+            Swal.fire({ title: 'AI Membaca Dokumen & Memproses Soal...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
             try {
-                let extractedText = "";
+                let totalImported = 0;
                 if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls') || fileName.endsWith('.csv')) {
-                    const data = new Uint8Array(await file.arrayBuffer());
-                    const workbook = XLSX.read(data, {type: 'array'});
-                    extractedText = XLSX.utils.sheet_to_csv(workbook.Sheets[workbook.SheetNames[0]]);
-                } else if (fileName.endsWith('.docx')) {
-                    const result = await mammoth.extractRawText({arrayBuffer: await file.arrayBuffer()});
-                    extractedText = result.value;
-                } else if (fileName.endsWith('.pdf')) {
-                    const pdf = await pdfjsLib.getDocument(new Uint8Array(await file.arrayBuffer())).promise;
-                    for (let i = 1; i <= pdf.numPages; i++) {
-                        let page = await pdf.getPage(i);
-                        let content = await page.getTextContent();
-                        extractedText += content.items.map(item => item.str).join(" ") + "\n";
+                    const data = await file.arrayBuffer();
+                    const workbook = XLSX.read(data);
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const rows = XLSX.utils.sheet_to_json(firstSheet);
+
+                    for (let r of rows) {
+                        let rowData = {};
+                        for (let key in r) rowData[key.trim().toLowerCase()] = r[key];
+
+                        let qText = rowData['pertanyaan'] || rowData['soal'] || Object.values(rowData)[0] || '';
+                        let qType = String(rowData['tipe'] || rowData['type'] || 'pilgan').toLowerCase();
+                        let ans = rowData['kunci'] || rowData['kunci jawaban'] || 'A';
+
+                        if (qText) {
+                            let finalType = 'pilgan';
+                            if (qType.includes('complex') || qType.includes('kompleks')) finalType = 'complex';
+                            else if (qType.includes('true') || qType.includes('benar')) finalType = 'truefalse';
+                            else if (qType.includes('isian')) finalType = 'isian';
+                            else if (qType.includes('essay')) finalType = 'essay';
+
+                            await supabaseClient.from('questions').insert([{
+                                question_text: String(qText),
+                                question_type: finalType,
+                                correct_answer: String(ans),
+                                package_name: packageNameInput,
+                                is_active: true,
+                                image_url: '',
+                                option: {
+                                    a: String(rowData['opsi a'] || rowData['a'] || ''),
+                                    b: String(rowData['opsi b'] || rowData['b'] || ''),
+                                    c: String(rowData['opsi c'] || rowData['c'] || ''),
+                                    d: String(rowData['opsi d'] || rowData['d'] || ''),
+                                    e: String(rowData['opsi e'] || rowData['e'] || '')
+                                }
+                            }]);
+                            totalImported++;
+                        }
                     }
-                } else if (fileName.endsWith('.txt')) {
-                    extractedText = await file.text();
-                }
-
-                await parseWithGroqAI(extractedText, packageNameInput);
-            } catch (err) {
-                console.error(err);
-                Swal.fire('Gagal', 'Terjadi kesalahan saat membaca file atau memproses AI.', 'error');
-            }
-        }
-
-        async function parseWithGroqAI(rawText, packageName) {
-            const prompt = `Anda adalah asisten cerdas pembuat soal ujian. Analisis teks mentah berikut, lalu ekstrak menjadi array objek JSON murni (hanya format JSON valid, tanpa teks pengantar lain) dengan struktur persis seperti ini:
-            [
-              {
-                "question": "Teks pertanyaan soal",
-                "type": "pilgan",
-                "opt_a": "Pilihan A",
-                "opt_b": "Pilihan B",
-                "opt_c": "Pilihan C",
-                "opt_d": "Pilihan D",
-                "answer": "A"
-              }
-            ]
-
-            Teks mentah dokumen:
-            ${rawText.substring(0, 12000)}`;
-
-            try {
-                const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${GROQ_API_KEY}`
-                    },
-                    body: JSON.stringify({
-                        model: 'openai/gpt-oss-120b',
-                        messages: [{ role: 'user', content: prompt }],
-                        response_format: { type: "json_object" }
-                    })
-                });
-
-                const result = await response.json();
-                if (result.error) throw new Error(result.error.message);
-
-                let candidateText = result.choices[0].message.content;
-                let questionsArray = [];
-                let parsed = JSON.parse(candidateText);
-                if (Array.isArray(parsed)) {
-                    questionsArray = parsed;
+                    Swal.fire('Berhasil!', `Sukses mengimpor ${totalImported} soal!`, 'success');
+                    switchTab('questions');
                 } else {
-                    let key = Object.keys(parsed).find(k => Array.isArray(parsed[k]));
-                    questionsArray = key ? parsed[key] : [];
-                }
+                    let extractedText = await file.text();
+                    let chunks = extractedText.split(/(?=\bSOAL\s+\d+|\b\d+[\.\)]\s+)/gi).filter(c => c.trim().length > 15);
+                    if (chunks.length === 0) chunks = [extractedText];
 
-                await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', packageName);
-
-                let count = 0;
-                for (let q of questionsArray) {
-                    if (q.question && q.answer) {
+                    for (let chunk of chunks) {
                         await supabaseClient.from('questions').insert([{
-                            question_text: q.question,
-                            correct_answer: q.answer,
-                            question_type: q.type || 'pilgan',
-                            package_name: packageName,
+                            question_text: chunk.trim(),
+                            question_type: 'pilgan',
+                            correct_answer: 'A',
+                            package_name: packageNameInput,
                             is_active: true,
-                            option: { a: q.opt_a || '', b: q.opt_b || '', c: q.opt_c || '', d: q.opt_d || '' }
+                            image_url: '',
+                            option: { a: 'Pilihan A', b: 'Pilihan B', c: 'Pilihan C', d: 'Pilihan D', e: '' }
                         }]);
-                        count++;
+                        totalImported++;
                     }
+                    Swal.fire('Berhasil!', `Sukses mengimpor ${totalImported} soal teks!`, 'success');
+                    switchTab('questions');
                 }
-
-                Swal.fire('Berhasil!', `Groq AI sukses membuat "${packageName}" dengan ${count} soal & otomatis menjadi paket aktif!`, 'success');
-                switchTab('questions');
-
             } catch (err) {
-                console.error("Detail Error Groq:", err);
-                Swal.fire('Gagal AI', 'Terjadi kesalahan saat memproses Groq AI: ' + err.message, 'error');
+                Swal.fire('Gagal Membaca File', 'Pastikan format file benar.', 'error');
             }
         }
 
-        document.getElementById('addQuestionForm').addEventListener('submit', async (e) => {
-            e.preventDefault();
-            const packageName = document.getElementById('manualPackage').value.trim() || 'Paket A';
-            const type = document.getElementById('qType').value;
-            const question = document.getElementById('qText').value;
-            const answer = document.getElementById('qAnswer').value;
-            let opt_a = type !== 'truefalse' ? document.getElementById('optA').value : 'Benar';
-            let opt_b = type !== 'truefalse' ? document.getElementById('optB').value : 'Salah';
-            let opt_c = type !== 'truefalse' ? document.getElementById('optC').value : '';
-            let opt_d = type !== 'truefalse' ? document.getElementById('optD').value : '';
-
-            const { error } = await supabaseClient.from('questions').insert([{
-                question_text: question,
-                correct_answer: answer,
-                question_type: type,
-                package_name: packageName,
-                is_active: true,
-                option: { a: opt_a, b: opt_b, c: opt_c, d: opt_d }
-            }]);
-
-            if(error) Swal.fire('Gagal', error.message, 'error');
-            else {
-                Swal.fire({ icon: 'success', title: 'Soal berhasil disimpan', timer: 1500, showConfirmButton: false });
-                document.getElementById('addQuestionForm').reset();
-                switchTab('questions');
-            }
-        });
-
-        async function deleteQuestion(id) {
-            const res = await Swal.fire({ title: 'Hapus soal?', icon: 'warning', showCancelButton: true, confirmButtonColor: '#ef4444' });
-            if (res.isConfirmed) {
-                await supabaseClient.from('questions').delete().eq('id', id);
-                loadQuestions();
-            }
-        }
-
+        // REAL-TIME MONITORING & ANALISIS SINKRON LIVE SESSIONS
         async function loadAnalytics() {
-            const { data: results } = await supabaseClient.from('exam_results').select('*').order('created_at', { ascending: false });
-            const { data: users } = await supabaseClient.from('Users').select('*').eq('role', 'student');
+            const { data: users } = await supabaseClient.from('Users').select('*');
+            const { data: results } = await supabaseClient.from('exam_results').select('*');
+            const { data: activeSessions } = await supabaseClient.from('live_sessions').select('*'); 
+
+            let studentUsers = (users || []).filter(u => (u.role || '').toLowerCase() === 'student');
+            let finishedStudentIds = new Set((results || []).map(r => r.student_id));
+            
+            let sessionMap = {};
+            (activeSessions || []).forEach(s => { sessionMap[s.student_id] = s.status; });
+
+            let loginListHTML = [];
+            let examListHTML = [];
+            let finishedListHTML = [];
+
+            studentUsers.forEach(s => {
+                let name = s.Name || s.name || s.email;
+                let status = sessionMap[name] || sessionMap[s.email] || 'login';
+
+                if(finishedStudentIds.has(name) || finishedStudentIds.has(s.email) || status === 'finished') {
+                    finishedListHTML.push(`<div class="bg-white p-2 rounded border flex justify-between"><span>${name}</span><span class="text-emerald-600 font-bold">Selesai</span></div>`);
+                } else if(status === 'exam') {
+                    examListHTML.push(`<div class="bg-white p-2 rounded border flex justify-between"><span>${name}</span><span class="text-blue-600 font-bold">Mengerjakan</span></div>`);
+                } else {
+                    loginListHTML.push(`<div class="bg-white p-2 rounded border flex justify-between"><span>${name}</span><span class="text-amber-600 font-bold">Login / Standby</span></div>`);
+                }
+            });
+
+            document.getElementById('monitorLoginCount').textContent = `${loginListHTML.length} Siswa`;
+            document.getElementById('monitorLoginList').innerHTML = loginListHTML.join('') || '<span class="text-slate-400">Tidak ada</span>';
+
+            document.getElementById('monitorExamCount').textContent = `${examListHTML.length} Siswa`;
+            document.getElementById('monitorExamList').innerHTML = examListHTML.join('') || '<span class="text-slate-400">Tidak ada</span>';
+
+            document.getElementById('monitorFinishedCount').textContent = `${finishedStudentIds.size} Siswa`;
+            document.getElementById('monitorFinishedList').innerHTML = finishedListHTML.join('') || '<span class="text-slate-400">Belum ada</span>';
 
             if(results) {
                 document.getElementById('analyticsTableBody').innerHTML = results.length ? results.map(r => `
-                    <tr class="border-b border-slate-100 hover:bg-slate-50/80 transition">
-                        <td class="p-3.5 font-bold text-slate-900">${r.student_id || 'Siswa'}</td>
-                        <td class="p-3.5 font-extrabold text-emerald-600">${r.score}</td>
-                        <td class="p-3.5"><span class="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-700">Selesai Ujian</span></td>
-                        <td class="p-3.5 text-xs text-slate-500">${r.created_at ? new Date(r.created_at).toLocaleString('id-ID') : '-'}</td>
+                    <tr class="border-b border-slate-100">
+                        <td class="p-3.5 font-bold">${r.student_id}</td>
+                        <td class="p-3.5 font-extrabold text-blue-600">${r.score}</td>
+                        <td class="p-3.5"><span class="bg-emerald-100 text-emerald-800 text-xs px-2.5 py-1 rounded-full font-bold">Selesai Ujian</span></td>
+                        <td class="p-3.5 text-xs">${r.strengths_weaknesses || 'Tuntas'}</td>
+                        <td class="p-3.5 text-center"><button onclick="deleteExamResult(${r.id})" class="bg-red-50 text-red-600 px-3 py-1 rounded-lg text-xs font-bold">Hapus</button></td>
                     </tr>
-                `).join('') : `<tr><td colspan="4" class="p-6 text-center text-slate-400 text-sm">Belum ada siswa yang menyelesaikan ujian.</td></tr>`;
-
-                generateAIGroqInsights(results, users ? users.length : 0);
+                `).join('') : `<tr><td colspan="5" class="p-6 text-center text-slate-400">Belum ada rekap nilai siswa.</td></tr>`;
             }
         }
 
-        async function generateAIGroqInsights(results, totalRegisteredStudents) {
-            const container = document.getElementById('aiInsightsBox');
-            if (!container) return;
+        setInterval(() => {
+            if(!document.getElementById('sectionAnalytics').classList.contains('hidden')) {
+                loadAnalytics();
+            }
+        }, 4000);
 
-            let completedCount = results.length;
-            let pendingCount = Math.max(0, totalRegisteredStudents - completedCount);
-            let avgScore = completedCount > 0 ? Math.round(results.reduce((acc, curr) => acc + curr.score, 0) / completedCount) : 0;
-
-            container.innerHTML = `
-                <div class="p-4 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-center gap-3">
-                    <span class="text-2xl animate-spin">⚡</span>
-                    <div>
-                        <h4 class="text-xs font-bold text-indigo-900 uppercase tracking-wide">Groq AI Menganalisis Kelas...</h4>
-                        <p class="text-xs text-indigo-700">Menyusun evaluasi dan rekomendasi materi...</p>
-                    </div>
-                </div>
-            `;
-
-            const prompt = `Bertindaklah sebagai pengawas kurikulum SD. Data rekap tryout:
-            - Total Siswa: ${totalRegisteredStudents}
-            - Sudah Selesai: ${completedCount}
-            - Belum Mengerjakan: ${pendingCount}
-            - Rata-rata Skor: ${avgScore}
-            - Skor: ${JSON.stringify(results.map(r => ({ nama: r.student_id, skor: r.score })))}
-
-            Berikan analisis singkat profesional (dalam bahasa Indonesia, gunakan format HTML paragraf/poin) mengenai:
-            1. Evaluasi performa kelas.
-            2. Rekomendasi topik pembelajaran yang harus ditingkatkan guru.`;
-
-            try {
-                const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${GROQ_API_KEY}`
-                    },
-                    body: JSON.stringify({
-                        model: 'openai/gpt-oss-120b',
-                        messages: [{ role: 'user', content: prompt }]
-                    })
-                });
-
-                const resJson = await response.json();
-                if(resJson.choices && resJson.choices[0]) {
-                    let aiText = resJson.choices[0].message.content;
-                    container.innerHTML = `
-                        <div class="p-5 bg-gradient-to-r from-indigo-50 via-blue-50 to-white border border-indigo-200 rounded-2xl space-y-3">
-                            <div class="flex items-center gap-2 text-indigo-900 font-extrabold text-sm">
-                                <span>⚡</span> Rekomendasi & Evaluasi Pembelajaran oleh Groq AI
-                            </div>
-                            <div class="text-xs text-slate-700 leading-relaxed space-y-2">
-                                ${aiText.replace(/\n/g, '<br>')}
-                            </div>
-                        </div>
-                    `;
+        function downloadExamResultsExcel() {
+            supabaseClient.from('exam_results').select('*').then(({ data }) => {
+                if (!data || data.length === 0) {
+                    Swal.fire('Kosong', 'Belum ada data rekap nilai untuk diunduh.', 'warning');
+                    return;
                 }
-            } catch (err) {
-                container.innerHTML = `<div class="p-3 bg-slate-50 text-xs text-slate-500 rounded-xl">Gagal memuat wawasan AI.</div>`;
+                let exportData = data.map(r => ({
+                    "Nama Siswa": r.student_id,
+                    "Skor Akhir": r.score,
+                    "Analisis & Penanganan": r.strengths_weaknesses ? r.strengths_weaknesses.replace(/<br>/g, ' - ') : 'Tuntas'
+                }));
+                const ws = XLSX.utils.json_to_sheet(exportData);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Rekap Nilai Siswa");
+                XLSX.writeFile(wb, "Rekap_Nilai_Dan_Analisis_Siswa_TKAS.xlsx");
+            });
+        }
+
+        async function initPreviewPackages() {
+            const { data: qs } = await supabaseClient.from('questions').select('package_name');
+            if(qs) {
+                let packages = [...new Set(qs.map(q => q.package_name || 'Paket A'))];
+                document.getElementById('previewPackageSelect').innerHTML = packages.map(p => `<option value="${p}">${p}</option>`).join('');
+                loadPreviewQuestions();
             }
         }
 
-        const TOKEN_INTERVAL = 5 * 60 * 1000;
-        function checkToken() {
-            let data = JSON.parse(localStorage.getItem('tkad_token_session'));
-            if (!data) return;
-            document.getElementById('activeTokenDisplay').textContent = data.token;
-            let remaining = TOKEN_INTERVAL - (new Date().getTime() - data.timestamp);
-            if (remaining > 0) {
-                let m = Math.floor(remaining / 60000), s = Math.floor((remaining % 60000) / 1000);
-                document.getElementById('countdownTimer').textContent = `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
-            }
+        async function loadPreviewQuestions() {
+            const pkg = document.getElementById('previewPackageSelect').value;
+            const { data: qs } = await supabaseClient.from('questions').select('*').eq('package_name', pkg);
+            previewQuestionsList = qs || [];
+            previewCurrentIndex = 0;
+            renderPreview();
         }
-        setInterval(checkToken, 1000);
-        checkToken();
 
-        function saveExamDuration() {
-            const val = document.getElementById('examDurationInput').value;
-            const minutes = parseInt(val);
-            if(!minutes || minutes <= 0) {
-                Swal.fire('Peringatan', 'Masukkan angka menit yang valid!', 'warning');
-                return;
-            }
-            localStorage.setItem('tkad_exam_duration_minutes', minutes);
-            Swal.fire('Berhasil', `Durasi ujian diatur selama ${minutes} menit.`, 'success');
+        function switchPreviewMode(mode) {
+            previewMode = mode;
+            document.getElementById('previewModeSingle').className = mode === 'single' ? 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white shadow-xs' : 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700';
+            document.getElementById('previewModeAll').className = mode === 'all' ? 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 text-white shadow-xs' : 'px-3.5 py-1.5 rounded-lg text-xs font-bold bg-slate-100 text-slate-700';
+            renderPreview();
         }
+
+        function renderPreview() {
+            const container = document.getElementById('previewContainer');
+            if(!previewQuestionsList.length) { container.innerHTML = `<p class="text-center text-slate-400 py-10">Tidak ada soal.</p>`; return; }
+
+            if(previewMode === 'single') {
+                const q = previewQuestionsList[previewCurrentIndex];
+                let optionsHTML = '';
+                const type = (q.question_type || 'pilgan').toLowerCase();
+
+                if (type === 'truefalse') {
+                    optionsHTML = `<div class="space-y-3 mt-3">`;
+                    let idx = 1;
+                    for (let [k, v] of Object.entries(q.option || {})) {
+                        if (v) {
+                            optionsHTML += `
+                                <div class="p-3 bg-white border rounded-xl flex items-center justify-between gap-4 shadow-xs">
+                                    <span class="text-sm font-medium text-slate-800">${idx}. ${v}</span>
+                                    <div class="flex gap-3 shrink-0">
+                                        <label class="px-3 py-1.5 border rounded-lg text-xs font-bold cursor-pointer hover:bg-emerald-50 flex items-center gap-1.5">
+                                            <input type="radio" name="tf_${idx}" value="B"> [ ] B
+                                        </label>
+                                        <label class="px-3 py-1.5 border rounded-lg text-xs font-bold cursor-pointer hover:bg-emerald-50 flex items-center gap-1.5">
+                                            <input type="radio" name="tf_${idx}" value="S"> [ ] S
+                                        </label>
+                                    </div>
+                                </div>
+                            `;
+                            idx++;
+                        }
+                    }
+                    optionsHTML += `</div>`;
+                } else if (type === 'complex') {
+                    optionsHTML = `<div class="flex flex-col gap-2 pt-2">`;
+                    for (let [k, v] of Object.entries(q.option || {})) {
+                        if (v) {
+                            optionsHTML += `
+                                <label class="p-3 rounded-xl border bg-white flex items-center gap-3 cursor-pointer hover:bg-emerald-50 transition">
+                                    <input type="checkbox" class="w-4 h-4 text-emerald-600 rounded">
+                                    <span class="font-bold uppercase w-6 text-emerald-700">${k}.</span>
+                                    <span class="text-sm">${v}</span>
+                                </label>
+                            `;
+                        }
+                    }
+                    optionsHTML += `</div>`;
+                } else if (type === 'isian') {
+                    optionsHTML = `<div class="pt-2"><input type="text" placeholder="Ketik jawaban singkat di sini..." class="w-full p-3 border rounded-xl bg-white text-sm outline-none focus:border-emerald-500"></div>`;
+                } else if (type === 'essay') {
+                    optionsHTML = `<div class="pt-2"><textarea rows="3" placeholder="Ketik uraian jawaban di sini..." class="w-full p-3 border rounded-xl bg-white text-sm outline-none focus:border-emerald-500"></textarea></div>`;
+                } else {
+                    optionsHTML = `<div class="flex flex-col gap-2 pt-2">`;
+                    for (let [k, v] of Object.entries(q.option || {})) {
+                        if (v) {
+                            optionsHTML += `
+                                <label class="p-3 rounded-xl border bg-white flex items-center gap-3 cursor-pointer hover:bg-emerald-50 transition">
+                                    <input type="radio" name="preview_pilgan" class="w-4 h-4 text-emerald-600">
+                                    <span class="font-bold uppercase w-6 text-emerald-700">${k}.</span>
+                                    <span class="text-sm">${v}</span>
+                                </label>
+                            `;
+                        }
+                    }
+                    optionsHTML += `</div>`;
+                }
+
+                container.innerHTML = `
+                    <div class="flex flex-col gap-4">
+                        <div class="flex justify-between items-center text-xs font-bold text-emerald-700 uppercase">
+                            <span>Soal No. ${previewCurrentIndex + 1} dari ${previewQuestionsList.length} (${type})</span>
+                        </div>
+                        <p class="font-bold text-slate-900 text-base">${q.question_text}</p>
+                        ${q.image_url ? `<div class="my-2"><img src="${q.image_url}" class="max-h-60 rounded-xl border object-contain"></div>` : ''}
+                        ${optionsHTML}
+                        <div class="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-xs font-bold text-emerald-800 mt-2">Kunci Jawaban: ${q.correct_answer}</div>
+                        <div class="flex justify-between pt-4">
+                            <button onclick="prevPreview()" ${previewCurrentIndex === 0 ? 'disabled class="opacity-50 px-4 py-2 bg-slate-200 rounded-xl text-xs font-bold"' : 'class="px-4 py-2 bg-slate-200 rounded-xl text-xs font-bold"'}>⬅️ Sebelumnya</button>
+                            <button onclick="nextPreview()" ${previewCurrentIndex === previewQuestionsList.length - 1 ? 'disabled class="opacity-50 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"' : 'class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"'}>Selanjutnya ➡️</button>
+                        </div>
+                    </div>
+                `;
+            } else {
+                container.innerHTML = previewQuestionsList.map((q, idx) => `
+                    <div class="bg-white p-5 rounded-xl border mb-4 shadow-xs space-y-3">
+                        <div class="text-xs font-bold text-emerald-700">No. ${idx + 1}</div>
+                        <p class="font-bold text-slate-900">${q.question_text}</p>
+                        ${q.image_url ? `<img src="${q.image_url}" class="max-h-48 rounded-lg border object-contain">` : ''}
+                        <div class="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-3 py-1 rounded inline-block">Kunci: ${q.correct_answer}</div>
+                    </div>
+                `).join('');
+            }
+        }
+
+        function nextPreview() { if(previewCurrentIndex < previewQuestionsList.length - 1) { previewCurrentIndex++; renderPreview(); } }
+        function prevPreview() { if(previewCurrentIndex > 0) { previewCurrentIndex--; renderPreview(); } }
+
+        async function deleteQuestion(id) { await supabaseClient.from('questions').delete().eq('id', id); loadQuestions(); }
+        async function deleteExamResult(id) { await supabaseClient.from('exam_results').delete().eq('id', id); loadAnalytics(); }
+        async function deleteAllExamResults() { await supabaseClient.from('exam_results').delete().not('id', 'is', null); loadAnalytics(); }
+        async function togglePackageStatus(pkg, status) {
+            if(status) await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', pkg);
+            await supabaseClient.from('questions').update({ is_active: status }).eq('package_name', pkg);
+            loadQuestions();
+        }
+        function saveExamDuration() { localStorage.setItem('tkad_exam_duration_minutes', document.getElementById('examDurationInput').value); Swal.fire('Tersimpan!', '', 'success'); }
 
         window.addEventListener('DOMContentLoaded', () => {
-            const saved = localStorage.getItem('tkad_exam_duration_minutes') || '60';
-            const field = document.getElementById('examDurationInput');
-            if(field) field.value = saved;
+            document.getElementById('examDurationInput').value = localStorage.getItem('tkad_exam_duration_minutes') || '60';
+            fetchTokenFromDB();
         });
-
-        loadQuestions();
     </script>
 </body>
 </html>

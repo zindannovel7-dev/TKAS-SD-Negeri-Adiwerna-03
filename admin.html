@@ -89,6 +89,7 @@
             <button onclick="switchTab('cards')" id="tabCardsBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">🖨️ Cetak Kartu Peserta</button>
             <button onclick="switchTab('token')" id="tabTokenBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">Token & Durasi</button>
             <button onclick="switchTab('analytics')" id="tabAnalyticsBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">📊 Real-Time & Analisis AI</button>
+            <button onclick="switchTab('itemAnalysis')" id="tabItemAnalysisBtn" class="px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition">📈 Analisis Butir Soal</button>
         </div>
 
         <!-- SECTION 1: USERS -->
@@ -217,7 +218,7 @@
                 <span class="text-xs font-bold uppercase tracking-widest text-purple-600">Token Aktif Saat Ini</span>
                 <div id="currentTokenBox" class="text-4xl font-extrabold text-purple-900 tracking-widest bg-white px-6 py-3 rounded-xl border shadow-inner">------</div>
                 <div class="text-xs font-semibold text-slate-600 bg-white px-3 py-1.5 rounded-full border flex items-center gap-1.5">
-                    <span>⏱️ Berubah Dalam:</span> <span id="tokenCountdownTimer" class="text-purple-700 font-extrabold text-sm">05:00</span>
+                    <span>⏱️️ Berubah Dalam:</span> <span id="tokenCountdownTimer" class="text-purple-700 font-extrabold text-sm">05:00</span>
                 </div>
             </div>
             <button onclick="forceGenerateDBToken()" class="bg-purple-600 text-white py-3 rounded-xl font-bold text-sm shadow-md">🔄 Buat / Ganti Token Baru</button>
@@ -266,6 +267,36 @@
                         </tr>
                     </thead>
                     <tbody id="analyticsTableBody"><tr><td colspan="5" class="p-6 text-center text-slate-400">Memuat data real-time...</td></tr></tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- SECTION 9: ANALISIS BUTIR SOAL & REKAP DETAIL -->
+        <section id="sectionItemAnalysis" class="pro-card rounded-2xl p-6 hidden flex flex-col gap-5">
+            <div class="flex flex-col sm:flex-row justify-between items-center gap-4">
+                <div>
+                    <h2 class="text-base font-bold text-slate-900">Analisis Butir Soal & Rekap Kesalahan Siswa</h2>
+                    <p class="text-xs text-slate-500">Melihat soal mana saja yang paling banyak dijawab salah beserta daftar siswa yang keliru.</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <label class="text-xs font-bold text-slate-600">Pilih Paket:</label>
+                    <select id="analysisPackageSelect" onchange="loadItemAnalysis()" class="px-3 py-1.5 border rounded-xl text-xs font-bold bg-slate-50 outline-none"></select>
+                </div>
+            </div>
+            <div class="overflow-x-auto rounded-xl border border-slate-200">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-100/70 text-slate-700 border-b text-xs uppercase tracking-wider">
+                            <th class="p-3.5 font-bold">No. Soal</th>
+                            <th class="p-3.5 font-bold">Teks Pertanyaan</th>
+                            <th class="p-3.5 font-bold text-center">Kunci</th>
+                            <th class="p-3.5 font-bold text-center">Jumlah Salah</th>
+                            <th class="p-3.5 font-bold">Siswa yang Menjawab Salah</th>
+                        </tr>
+                    </thead>
+                    <tbody id="itemAnalysisTableBody">
+                        <tr><td colspan="5" class="p-6 text-center text-slate-400">Memuat analisis butir soal...</td></tr>
+                    </tbody>
                 </table>
             </div>
         </section>
@@ -325,8 +356,8 @@
         let previewMode = 'single';
 
         function switchTab(tab) {
-            ['sectionUsers', 'sectionQuestions', 'sectionUpload', 'sectionAdd', 'sectionPreview', 'sectionCards', 'sectionToken', 'sectionAnalytics'].forEach(id => document.getElementById(id).classList.add('hidden'));
-            ['tabUsersBtn', 'tabQuestionsBtn', 'tabUploadBtn', 'tabAddBtn', 'tabPreviewBtn', 'tabCardsBtn', 'tabTokenBtn', 'tabAnalyticsBtn'].forEach(id => document.getElementById(id).className = 'px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition');
+            ['sectionUsers', 'sectionQuestions', 'sectionUpload', 'sectionAdd', 'sectionPreview', 'sectionCards', 'sectionToken', 'sectionAnalytics', 'sectionItemAnalysis'].forEach(id => document.getElementById(id).classList.add('hidden'));
+            ['tabUsersBtn', 'tabQuestionsBtn', 'tabUploadBtn', 'tabAddBtn', 'tabPreviewBtn', 'tabCardsBtn', 'tabTokenBtn', 'tabAnalyticsBtn', 'tabItemAnalysisBtn'].forEach(id => document.getElementById(id).className = 'px-4 py-2 rounded-xl font-bold text-sm text-slate-600 hover:bg-white/80 transition');
 
             if(tab === 'users') { document.getElementById('sectionUsers').classList.remove('hidden'); document.getElementById('tabUsersBtn').className += ' bg-blue-600 text-white shadow-sm'; loadData(); }
             else if(tab === 'questions') { document.getElementById('sectionQuestions').classList.remove('hidden'); document.getElementById('tabQuestionsBtn').className += ' bg-blue-600 text-white shadow-sm'; loadQuestions(); }
@@ -336,6 +367,7 @@
             else if(tab === 'cards') { document.getElementById('sectionCards').classList.remove('hidden'); document.getElementById('tabCardsBtn').className += ' bg-blue-600 text-white shadow-sm'; loadCardsGrid(); }
             else if(tab === 'token') { document.getElementById('sectionToken').classList.remove('hidden'); document.getElementById('tabTokenBtn').className += ' bg-blue-600 text-white shadow-sm'; fetchTokenAndDurationFromDB(); }
             else if(tab === 'analytics') { document.getElementById('sectionAnalytics').classList.remove('hidden'); document.getElementById('tabAnalyticsBtn').className += ' bg-blue-600 text-white shadow-sm'; loadAnalytics(); }
+            else if(tab === 'itemAnalysis') { document.getElementById('sectionItemAnalysis').classList.remove('hidden'); document.getElementById('tabItemAnalysisBtn').className += ' bg-blue-600 text-white shadow-sm'; initItemAnalysisPackages(); }
         }
 
         document.getElementById('btnLogout').addEventListener('click', () => {
@@ -828,6 +860,62 @@
                 `).join('') : `<tr><td colspan="5" class="p-6 text-center text-slate-400">Belum ada rekap nilai siswa.</td></tr>`;
             }
         }
+
+        // ==========================================
+        // FITUR BARU: ANALISIS BUTIR SOAL & REKAP KESALAHAN
+        // ==========================================
+        async function initItemAnalysisPackages() {
+            const { data: qs } = await supabaseClient.from('questions').select('package_name');
+            if(qs && qs.length > 0) {
+                let packages = [...new Set(qs.map(q => q.package_name || 'Paket A'))];
+                document.getElementById('analysisPackageSelect').innerHTML = packages.map(p => `<option value="${p}">${p}</option>`).join('');
+                loadItemAnalysis();
+            } else {
+                document.getElementById('analysisPackageSelect').innerHTML = `<option value="">Tidak ada paket</option>`;
+                document.getElementById('itemAnalysisTableBody').innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-400">Belum ada data soal.</td></tr>`;
+            }
+        }
+
+        async function loadItemAnalysis() {
+            const pkg = document.getElementById('analysisPackageSelect').value;
+            const tbody = document.getElementById('itemAnalysisTableBody');
+            
+            const { data: qs } = await supabaseClient.from('questions').select('*').eq('package_name', pkg);
+            const { data: results } = await supabaseClient.from('exam_results').select('*');
+
+            if(!qs || qs.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="5" class="p-6 text-center text-slate-400">Tidak ada soal dalam paket ini.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = qs.map((q, idx) => {
+                let wrongStudents = [];
+                (results || []).forEach(r => {
+                    // Jika data detail jawaban disimpan dalam bentuk objek/json di exam_results (misal r.detail_jawaban)
+                    if (r.detail_jawaban && r.detail_jawaban[q.id]) {
+                        let studentAns = String(r.detail_jawaban[q.id]).trim().toUpperCase();
+                        let correctAns = String(q.correct_answer || '').trim().toUpperCase();
+                        if (studentAns !== correctAns) {
+                            wrongStudents.push(`${r.student_id} (Jawab: ${r.detail_jawaban[q.id]})`);
+                        }
+                    }
+                });
+
+                let wrongCountHTML = wrongStudents.length > 0 ? `<span class="bg-red-100 text-red-700 font-extrabold px-2.5 py-1 rounded-full text-xs">${wrongStudents.length} Siswa</span>` : `<span class="text-emerald-600 font-bold text-xs">0 (Semua Benar)</span>`;
+                let listHTML = wrongStudents.length > 0 ? `<span class="text-xs text-slate-700">${wrongStudents.join(', ')}</span>` : `<span class="text-xs text-slate-400 italic">Tidak ada kesalahan tercatat</span>`;
+
+                return `
+                    <tr class="border-b border-slate-100 hover:bg-slate-50 transition">
+                        <td class="p-3.5 font-bold text-blue-600">No. ${idx + 1}</td>
+                        <td class="p-3.5 font-medium max-w-xs truncate">${q.question_text}</td>
+                        <td class="p-3.5 text-center font-bold text-emerald-700">${q.correct_answer || '-'}</td>
+                        <td class="p-3.5 text-center">${wrongCountHTML}</td>
+                        <td class="p-3.5">${listHTML}</td>
+                    </tr>
+                `;
+            }).join('');
+        }
+        // ==========================================
 
         setInterval(() => {
             if(!document.getElementById('sectionAnalytics').classList.contains('hidden')) {

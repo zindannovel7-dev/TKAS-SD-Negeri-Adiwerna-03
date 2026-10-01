@@ -581,8 +581,23 @@
             let score = 0;
             let total = activeQuestions.length;
 
+            // Pemetaan jawaban siswa berdasarkan ID soal asli (agar akurat dibaca analisis guru)
+            let detailJawabanDB = {};
+
             activeQuestions.forEach((q, idx) => {
                 let userAns = studentAnswers[idx];
+                
+                // Rekam jawaban per ID soal asli untuk analisis butir soal
+                if (userAns !== undefined) {
+                    if (typeof userAns === 'object' && !Array.isArray(userAns)) {
+                        detailJawabanDB[q.id] = JSON.stringify(userAns);
+                    } else if (Array.isArray(userAns)) {
+                        detailJawabanDB[q.id] = userAns.join(', ');
+                    } else {
+                        detailJawabanDB[q.id] = String(userAns);
+                    }
+                }
+
                 let correctAns = (q.correct_answer || '').trim().toUpperCase();
                 let type = (q.question_type || 'pilgan').toLowerCase();
 
@@ -640,6 +655,7 @@
                 student_id: studentFullName,
                 score: finalScore,
                 detailed_answers: studentAnswers,
+                detail_jawaban: detailJawabanDB, // <--- TAMBAHAN UNTUK SINKRONISASI ANALISIS BUTIR SOAL GURU
                 strengths_weaknesses: evaluationHTML
             }]);
 

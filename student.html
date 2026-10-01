@@ -130,8 +130,6 @@
             }
         }
 
-        // Begitu halaman selesai dimuat, langsung munculkan pop-up selamat datang / tombol "Mulai Sesi Aman"
-        // Ini memaksa interaksi pertama terjadi secara instan sehingga browser mengizinkan Full Screen tanpa jeda janggal.
         window.addEventListener('DOMContentLoaded', () => {
             if (!document.fullscreenElement && !document.webkitFullscreenElement) {
                 Swal.fire({
@@ -168,7 +166,6 @@
                 });
             }
         }
-        // -----------------------------------------------------------
 
         function shuffleArray(array) {
             let arr = [...array];
@@ -581,25 +578,31 @@
             let score = 0;
             let total = activeQuestions.length;
 
-            // Pemetaan jawaban siswa berdasarkan ID soal asli (agar akurat dibaca analisis guru)
             let detailJawabanDB = {};
 
             activeQuestions.forEach((q, idx) => {
                 let userAns = studentAnswers[idx];
+                let type = (q.question_type || 'pilgan').toLowerCase();
                 
-                // Rekam jawaban per ID soal asli untuk analisis butir soal
-                if (userAns !== undefined) {
-                    if (typeof userAns === 'object' && !Array.isArray(userAns)) {
-                        detailJawabanDB[q.id] = JSON.stringify(userAns);
+                // Simpan jawaban rapi ke objek detail jawaban untuk sinkronisasi analisis butir soal
+                if (userAns !== undefined && userAns !== null && userAns !== '') {
+                    if (type === 'truefalse') {
+                        // Pastikan objek Benar/Salah dikirimkan konsisten (misal: {1: "B", 2: "S", ...})
+                        let tfObj = {};
+                        if (typeof userAns === 'object') {
+                            for (let k in userAns) {
+                                tfObj[k] = String(userAns[k]).trim().toUpperCase();
+                            }
+                        }
+                        detailJawabanDB[q.id] = JSON.stringify(tfObj);
                     } else if (Array.isArray(userAns)) {
-                        detailJawabanDB[q.id] = userAns.join(', ');
+                        detailJawabanDB[q.id] = userAns.sort().join(', ');
                     } else {
-                        detailJawabanDB[q.id] = String(userAns);
+                        detailJawabanDB[q.id] = String(userAns).trim().toUpperCase();
                     }
                 }
 
                 let correctAns = (q.correct_answer || '').trim().toUpperCase();
-                let type = (q.question_type || 'pilgan').toLowerCase();
 
                 if (userAns) {
                     if (type === 'pilgan' || type === 'isian') {
@@ -655,7 +658,7 @@
                 student_id: studentFullName,
                 score: finalScore,
                 detailed_answers: studentAnswers,
-                detail_jawaban: detailJawabanDB, // <--- TAMBAHAN UNTUK SINKRONISASI ANALISIS BUTIR SOAL GURU
+                detail_jawaban: detailJawabanDB, // Sinkron untuk Analisis Butir Soal Admin & Guru
                 strengths_weaknesses: evaluationHTML
             }]);
 

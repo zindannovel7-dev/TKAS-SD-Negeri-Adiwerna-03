@@ -584,10 +584,8 @@
                 let userAns = studentAnswers[idx];
                 let type = (q.question_type || 'pilgan').toLowerCase();
                 
-                // Simpan jawaban rapi ke objek detail jawaban untuk sinkronisasi analisis butir soal
                 if (userAns !== undefined && userAns !== null && userAns !== '') {
                     if (type === 'truefalse') {
-                        // Pastikan objek Benar/Salah dikirimkan konsisten (misal: {1: "B", 2: "S", ...})
                         let tfObj = {};
                         if (typeof userAns === 'object') {
                             for (let k in userAns) {

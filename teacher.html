@@ -185,7 +185,6 @@
                 </div>
             </div>
 
-            <!-- LIVE CARDS SINKRON DENGAN live_sessions -->
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 flex flex-col">
                     <span class="text-xs font-bold text-amber-700 uppercase">1. Sedang Login</span>
@@ -688,7 +687,7 @@
         }
 
         // ==========================================
-        // FITUR ANALISIS BUTIR SOAL & SMART MATCHING
+        // FITUR ANALISIS BUTIR SOAL & SMART MATCHING (DIPERBARUI KEBAL URUTAN KOMPLEKS)
         // ==========================================
         async function initItemAnalysisPackages() {
             const { data: qs } = await supabaseClient.from('questions').select('package_name');
@@ -750,7 +749,31 @@
                             } catch(e) {
                                 isWrong = true;
                             }
-                        } else {
+                        } 
+                        // === PERBAIKAN UNTUK SOAL KOMPLEKS (KEBAL URUTAN & SPASI: A, B SAMA DENGAN B, A) ===
+                        else if (type === 'complex') {
+                            let studentNormalized = String(rawVal)
+                                .toUpperCase()
+                                .split(',')
+                                .map(s => s.trim())
+                                .filter(s => s.length > 0)
+                                .sort()
+                                .join(', ');
+
+                            let correctNormalized = correctAnsRaw
+                                .toUpperCase()
+                                .split(',')
+                                .map(s => s.trim())
+                                .filter(s => s.length > 0)
+                                .sort()
+                                .join(', ');
+
+                            if (studentNormalized !== correctNormalized) {
+                                isWrong = true;
+                            }
+                        } 
+                        // ==============================================================================
+                        else {
                             let studentAns = String(rawVal).trim().toUpperCase();
                             let correctAns = correctAnsRaw.toUpperCase();
                             if (studentAns !== correctAns) {
@@ -920,7 +943,7 @@
                         <div class="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-xs font-bold text-emerald-800 mt-2">Kunci Jawaban: ${q.correct_answer}</div>
                         <div class="flex justify-between pt-4">
                             <button onclick="prevPreview()" ${previewCurrentIndex === 0 ? 'disabled class="opacity-50 px-4 py-2 bg-slate-200 rounded-xl text-xs font-bold"' : 'class="px-4 py-2 bg-slate-200 rounded-xl text-xs font-bold"'}>⬅️ Sebelumnya</button>
-                            <button onclick="nextPreview()" ${previewCurrentIndex === previewQuestionsList.length - 1 ? 'disabled class="opacity-50 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"' : 'class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"'}>Selanjutnya ➡️️</button>
+                            <button onclick="nextPreview()" ${previewCurrentIndex === previewQuestionsList.length - 1 ? 'disabled class="opacity-50 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"' : 'class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"'}>Selanjutnya ➡️</button>
                         </div>
                     </div>
                 `;

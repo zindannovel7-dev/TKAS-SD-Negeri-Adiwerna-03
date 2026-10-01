@@ -27,7 +27,7 @@
                 const currentUser = JSON.parse(localStorage.getItem('tkad_current_user') || '{}');
                 if (!currentUser.role || currentUser.role !== 'teacher') {
                     if (currentUser.role === 'admin') window.location.href = 'admin.html';
-                    else if (currentUser.role === 'student') window.location.href = 'student.html';
+                    else if (currentUser.role === 'student') window.location.href = 'exam.html';
                     else window.location.href = 'index.html';
                     return;
                 }
@@ -98,7 +98,7 @@
                     </select>
                 </div>
                 <div class="flex gap-2">
-                    <button onclick="deleteSelectedPackage()" id="btnDeletePackage" class="bg-amber-100 text-amber-800 px-4 py-2 rounded-xl text-xs font-bold hidden">🗑️️ Hapus Paket Terpilih Ini</button>
+                    <button onclick="deleteSelectedPackage()" id="btnDeletePackage" class="bg-amber-100 text-amber-800 px-4 py-2 rounded-xl text-xs font-bold hidden">🗑 Hapus Paket Terpilih Ini</button>
                     <button onclick="downloadQuestionTemplate()" class="bg-emerald-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold">📥 Download Template</button>
                 </div>
             </div>
@@ -181,7 +181,7 @@
                 </div>
                 <div class="flex gap-2">
                     <button onclick="downloadExamResultsExcel()" class="bg-emerald-600 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-sm">📥 Download Rekap Nilai (Excel)</button>
-                    <button onclick="deleteAllExamResults()" class="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold">🗑️️ Hapus Rekap</button>
+                    <button onclick="deleteAllExamResults()" class="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold">🗑 Hapus Rekap</button>
                 </div>
             </div>
 
@@ -532,7 +532,6 @@
             let opt_d = document.getElementById('optD') ? document.getElementById('optD').value : '';
             let opt_e = document.getElementById('optE') ? document.getElementById('optE').value : '';
 
-            // Otomatis menonaktifkan paket lain agar paket manual baru menjadi satu-satunya yang aktif
             await supabaseClient.from('questions').update({ is_active: false }).neq('package_name', packageName);
 
             await supabaseClient.from('questions').insert([{
@@ -569,7 +568,6 @@
             Swal.fire({ title: 'AI Membaca Dokumen & Memproses Soal...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
 
             try {
-                // Nonaktifkan semua paket lama saat upload paket baru
                 await supabaseClient.from('questions').update({ is_active: false }).not('package_name', 'is', null);
 
                 let totalImported = 0;
@@ -690,7 +688,7 @@
         }
 
         // ==========================================
-        // FITUR BARU: ANALISIS BUTIR SOAL UNTUK GURU
+        // FITUR ANALISIS BUTIR SOAL & SMART MATCHING
         // ==========================================
         async function initItemAnalysisPackages() {
             const { data: qs } = await supabaseClient.from('questions').select('package_name');
@@ -718,12 +716,57 @@
 
             tbody.innerHTML = qs.map((q, idx) => {
                 let wrongStudents = [];
+                let type = (q.question_type || 'pilgan').toLowerCase();
+                let correctAnsRaw = String(q.correct_answer || '').trim();
+
                 (results || []).forEach(r => {
-                    if (r.detail_jawaban && r.detail_jawaban[q.id]) {
-                        let studentAns = String(r.detail_jawaban[q.id]).trim().toUpperCase();
-                        let correctAns = String(q.correct_answer || '').trim().toUpperCase();
-                        if (studentAns !== correctAns) {
-                            wrongStudents.push(`${r.student_id} (Jawab: ${r.detail_jawaban[q.id]})`);
+                    let targetAnsObj = r.detail_jawaban || r.detailed_answers;
+                    if (targetAnsObj && targetAnsObj[q.id]) {
+                        let rawVal = targetAnsObj[q.id];
+                        let isWrong = false;
+
+                        if (type === 'truefalse') {
+                            try {
+                                let parsedObj = typeof rawVal === 'string' ? JSON.parse(rawVal) : rawVal;
+                                let cleanCorrect = correctAnsRaw.toUpperCase()
+                                    .replace(/BENAR/g, 'B')
+                                    .replace(/SALAH/g, 'S')
+                                    .replace(/\s+/g, '');
+                                
+                                let studentTokens = [];
+                                for (let k in parsedObj) {
+                                    let ansVal = String(parsedObj[k]).trim().toUpperCase();
+                                    if (ansVal === 'BENAR') ansVal = 'B';
+                                    if (ansVal === 'SALAH') ansVal = 'S';
+                                    studentTokens.push(`${k}:${ansVal}`);
+                                }
+                                
+                                let cleanStudent = studentTokens.sort().join(',');
+                                let sortedCorrect = cleanCorrect.split(',').sort().join(',');
+
+                                if (cleanStudent !== sortedCorrect) {
+                                    isWrong = true;
+                                }
+                            } catch(e) {
+                                isWrong = true;
+                            }
+                        } else {
+                            let studentAns = String(rawVal).trim().toUpperCase();
+                            let correctAns = correctAnsRaw.toUpperCase();
+                            if (studentAns !== correctAns) {
+                                isWrong = true;
+                            }
+                        }
+
+                        if (isWrong) {
+                            let displayAns = rawVal;
+                            if (typeof rawVal === 'string' && rawVal.startsWith('{')) {
+                                try {
+                                    let obj = JSON.parse(rawVal);
+                                    displayAns = Object.entries(obj).map(([k, v]) => `${k}: ${v}`).join(', ');
+                                } catch(e) {}
+                            }
+                            wrongStudents.push(`${r.student_id} (Jawab: ${displayAns})`);
                         }
                     }
                 });
@@ -768,7 +811,6 @@
             });
         }
 
-        // --- PREVIEW OTOMATIS MEMILIH PAKET YANG AKTIF ---
         async function initPreviewPackages() {
             const { data: qs } = await supabaseClient.from('questions').select('package_name, is_active');
             if(qs && qs.length > 0) {
@@ -878,7 +920,7 @@
                         <div class="bg-emerald-50 border border-emerald-200 p-3 rounded-xl text-xs font-bold text-emerald-800 mt-2">Kunci Jawaban: ${q.correct_answer}</div>
                         <div class="flex justify-between pt-4">
                             <button onclick="prevPreview()" ${previewCurrentIndex === 0 ? 'disabled class="opacity-50 px-4 py-2 bg-slate-200 rounded-xl text-xs font-bold"' : 'class="px-4 py-2 bg-slate-200 rounded-xl text-xs font-bold"'}>⬅️ Sebelumnya</button>
-                            <button onclick="nextPreview()" ${previewCurrentIndex === previewQuestionsList.length - 1 ? 'disabled class="opacity-50 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"' : 'class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"'}>Selanjutnya ➡️</button>
+                            <button onclick="nextPreview()" ${previewCurrentIndex === previewQuestionsList.length - 1 ? 'disabled class="opacity-50 px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"' : 'class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"'}>Selanjutnya ➡️️</button>
                         </div>
                     </div>
                 `;

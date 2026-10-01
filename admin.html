@@ -236,7 +236,7 @@
             <div class="flex justify-between items-center">
                 <div>
                     <h2 class="text-base font-bold text-slate-900">Live Monitor & Analisis Hasil Peserta (Real-Time)</h2>
-                    <p class="text-xs text-slate-500">Memantau status siswa secara langsung: Login, Mengerjakan, Selesai Ujian & Rekap Skor.</p>
+                    <p class="text-xs text-slate-500">Memantau siswa secara langsung: Login, Mengerjakan, Selesai Ujian & Rekap Skor.</p>
                 </div>
                 <button onclick="deleteAllExamResults()" class="bg-red-50 text-red-600 px-4 py-2 rounded-xl text-xs font-bold">🗑️ Hapus Rekap Nilai</button>
             </div>
@@ -855,7 +855,7 @@
         }
 
         // ==========================================
-        // FITUR ANALISIS BUTIR SOAL & REKAP KESALAHAN (DIUPDATE DENGAN SMART MATCHING)
+        // FITUR ANALISIS BUTIR SOAL & REKAP KESALAHAN (DIPERBARUI: SMART MATCHING & KEBAL URUTAN KOMPLEKS)
         // ==========================================
         async function initItemAnalysisPackages() {
             const { data: qs } = await supabaseClient.from('questions').select('package_name');
@@ -887,7 +887,6 @@
                 let correctAnsRaw = String(q.correct_answer || '').trim();
 
                 (results || []).forEach(r => {
-                    // Mendukung pemeriksaan r.detail_jawaban (format per ID soal) maupun r.detailed_answers
                     let targetAnsObj = r.detail_jawaban || r.detailed_answers;
                     if (targetAnsObj && targetAnsObj[q.id]) {
                         let rawVal = targetAnsObj[q.id];
@@ -897,7 +896,6 @@
                             try {
                                 let parsedObj = typeof rawVal === 'string' ? JSON.parse(rawVal) : rawVal;
                                 
-                                // Konversi kunci jawaban database: ubah kata "BENAR" jadi "B" dan "SALAH" jadi "S", lalu hapus spasi
                                 let cleanCorrect = correctAnsRaw.toUpperCase()
                                     .replace(/BENAR/g, 'B')
                                     .replace(/SALAH/g, 'S')
@@ -920,7 +918,31 @@
                             } catch(e) {
                                 isWrong = true;
                             }
-                        } else {
+                        } 
+                        // === PENGECEKAN SOAL KOMPLEKS (KEBAL URUTAN & SPASI: A, B SAMA DENGAN B, A) ===
+                        else if (type === 'complex') {
+                            let studentNormalized = String(rawVal)
+                                .toUpperCase()
+                                .split(',')
+                                .map(s => s.trim())
+                                .filter(s => s.length > 0)
+                                .sort()
+                                .join(', ');
+
+                            let correctNormalized = correctAnsRaw
+                                .toUpperCase()
+                                .split(',')
+                                .map(s => s.trim())
+                                .filter(s => s.length > 0)
+                                .sort()
+                                .join(', ');
+
+                            if (studentNormalized !== correctNormalized) {
+                                isWrong = true;
+                            }
+                        } 
+                        // ==============================================================================
+                        else {
                             let studentAns = String(rawVal).trim().toUpperCase();
                             let correctAns = correctAnsRaw.toUpperCase();
                             if (studentAns !== correctAns) {
